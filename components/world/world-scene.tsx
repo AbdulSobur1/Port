@@ -1,7 +1,6 @@
 'use client';
 
 import { Canvas } from '@react-three/fiber';
-import { PerformanceMonitor } from '@react-three/drei';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -9,6 +8,7 @@ import { World } from './city';
 import { ChaseCamera } from './chase-camera';
 import { Simulation } from './simulation';
 import { Hud } from './hud';
+import { AdaptiveQuality } from './adaptive-quality';
 import { createWorld, type World as PhysicsWorld } from './physics';
 import { getLayout, worldMeta, type WorldId } from './world-cities';
 import { resetVehiclePose } from './store';
@@ -71,10 +71,15 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
           dpr={lowPower ? 1 : [1, 1.5]}
           shadows={!lowPower}
           gl={{ antialias: !lowPower, powerPreference: 'high-performance' }}
+          onCreated={({ gl }) => {
+            // Shadow maps are re-rendered only when the sun moves (see Atmosphere),
+            // instead of every frame for the whole city.
+            gl.shadowMap.autoUpdate = false;
+            gl.shadowMap.needsUpdate = true;
+          }}
         >
           <color attach="background" args={[layout.theme.zenith ?? layout.theme.background]} />
-          <PerformanceMonitor
-            flipflops={3}
+          <AdaptiveQuality
             onDecline={() => setPerformanceReduced(true)}
             onIncline={() => setPerformanceReduced(false)}
           />

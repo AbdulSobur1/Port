@@ -9,7 +9,7 @@
 
 import * as THREE from 'three';
 import { useMemo, useRef, type RefObject } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import type { WorldTheme, WorldWeather } from './world-layout';
 import { animateHour, samplePalette, type DayPalette } from './time-of-day';
 
@@ -250,12 +250,14 @@ function Weather({ weather, lowPower }: { weather: WorldWeather; lowPower: boole
 
 export function Atmosphere({ theme, lowPower = false }: { theme: WorldTheme; lowPower?: boolean }) {
   const palette = useDayNight(theme);
+  const { gl } = useThree();
   const ambient = useRef<THREE.AmbientLight>(null!);
   const hemi = useRef<THREE.HemisphereLight>(null!);
   const sun = useRef<THREE.DirectionalLight>(null!);
   const fog = useRef<THREE.Fog>(null!);
+  const shadowTick = useRef(0);
 
-  useFrame(({ camera }) => {
+  useFrame((_, dt) => {
     const p = palette.current;
     if (ambient.current) {
       ambient.current.intensity = p.ambient.intensity;
@@ -266,21 +268,26 @@ export function Atmosphere({ theme, lowPower = false }: { theme: WorldTheme; low
       hemi.current.color.set(p.hemi.sky);
       hemi.current.groundColor.set(p.hemi.ground);
     }
-    if (sun.current) {
-      sun.current.position.set(
-        camera.position.x + p.sun.position[0],
-        p.sun.position[1],
-        camera.position.z + p.sun.position[2],
-      );
-      sun.current.intensity = p.sun.intensity;
-      sun.current.color.set(p.sun.color);
-      sun.current.target.position.set(camera.position.x, 0, camera.position.z);
-      sun.current.target.updateMatrixWorld();
-    }
     if (fog.current) {
       fog.current.color.set(p.fog);
       fog.current.near = theme.fog[1];
       fog.current.far = theme.fog[2];
+    }
+
+    // Colour/intensity are cheap and update every frame; the sun direction and its shadow
+    // map only refresh a few times a second. The whole city sits inside the shadow frustum,
+    // so the light no longer has to chase the camera.
+    if (sun.current) {
+      sun.current.intensity = p.sun.intensity;
+      sun.current.color.set(p.sun.color);
+      shadowTick.current += dt;
+      if (shadowTick.current > 0.4) {
+        shadowTick.current = 0;
+        sun.current.position.set(...p.sun.position);
+        sun.current.target.position.set(0, 0, 0);
+        sun.current.target.updateMatrixWorld();
+        if (gl.shadowMap.autoUpdate === false) gl.shadowMap.needsUpdate = true;
+      }
     }
   });
 
@@ -295,11 +302,14 @@ export function Atmosphere({ theme, lowPower = false }: { theme: WorldTheme; low
         intensity={theme.sun.intensity}
         color={theme.sun.color}
         castShadow
-        shadow-mapSize={[1536, 1536]}
-        shadow-camera-left={-28}
-        shadow-camera-right={28}
-        shadow-camera-top={28}
-        shadow-camera-bottom={-28}
+        shadow-mapSize={[1024, 1024]}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={30}
+        shadow-camera-bottom={-30}
+        shadow-camera-near={1}
+        shadow-camera-far={90}
+        shadow-bias={-0.0008}
       />
       <Sky palette={palette} />
       <Weather weather={theme.weather ?? 'clear'} lowPower={lowPower} />

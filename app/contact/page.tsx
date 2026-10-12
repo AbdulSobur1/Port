@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { WorldScene } from '@/components/world/world-scene';
+import { WorldLoader } from '@/components/world/world-loader';
 
 export const metadata: Metadata = {
   title: 'Contact | Soburr',
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function ContactCityPage() {
-  return <WorldScene worldId="contact" />;
+  return <WorldLoader worldId="contact" />;
 }

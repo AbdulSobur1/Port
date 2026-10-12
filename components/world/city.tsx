@@ -1,6 +1,7 @@
 'use client';
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { vehicle as vehicleState } from './store';
@@ -192,15 +193,32 @@ function Building({ spec, index }: { spec: BuildingSpec; index: number }) {
   const { x, z, w, d, h, tint, accent, style } = spec;
   const windowRows = Math.max(2, Math.floor(h / 1.25));
   const windowCols = Math.max(2, Math.floor(w / 0.65));
-  const windows = useMemo(() => {
-    const result: { x: number; y: number }[] = [];
+  const windowGeoms = useMemo(() => {
+    const paneGeo = new THREE.PlaneGeometry(Math.min(0.36, w / (windowCols + 1)), 0.48);
+    const sillGeo = new THREE.BoxGeometry(Math.min(0.42, w / windowCols), 0.055, 0.055);
+    const panes: THREE.BufferGeometry[] = [];
+    const accents: THREE.BufferGeometry[] = [];
+    const sills: THREE.BufferGeometry[] = [];
     for (let row = 0; row < windowRows; row++) {
       for (let col = 0; col < windowCols; col++) {
-        result.push({ x: (col - (windowCols - 1) / 2) * (w / (windowCols + 0.7)), y: 0.65 + row * 1.05 });
+        const wx = (col - (windowCols - 1) / 2) * (w / (windowCols + 0.7));
+        const wy = 0.65 + row * 1.05;
+        const pane = paneGeo.clone();
+        pane.translate(wx, wy, d / 2 + 0.012);
+        ((row * windowCols + col) % 5 === 0 ? accents : panes).push(pane);
+        const sill = sillGeo.clone();
+        sill.translate(wx, wy, d / 2 - 0.006);
+        sills.push(sill);
       }
     }
-    return result;
-  }, [windowRows, windowCols, w]);
+    paneGeo.dispose();
+    sillGeo.dispose();
+    return {
+      panes: panes.length ? mergeGeometries(panes, false) : null,
+      accents: accents.length ? mergeGeometries(accents, false) : null,
+      sills: mergeGeometries(sills, false),
+    };
+  }, [windowRows, windowCols, w, d]);
 
   return (
     <group position={[x, 0, z]}>
@@ -212,19 +230,23 @@ function Building({ spec, index }: { spec: BuildingSpec; index: number }) {
         <boxGeometry args={[w, h, d]} />
         <meshStandardMaterial color={tint} roughness={0.72} metalness={0.22} />
       </mesh>
-      {/* Recessed-looking window bays */}
-      {windows.map((win, i) => (
-        <group key={i} position={[win.x, win.y, d / 2 + 0.012]}>
-          <mesh>
-            <planeGeometry args={[Math.min(0.36, w / (windowCols + 1)), 0.48]} />
-            <meshStandardMaterial color={i % 5 === 0 ? accent : '#101c1c'} emissive={i % 5 === 0 ? accent : '#213b37'} emissiveIntensity={i % 5 === 0 ? 0.65 : 0.16} roughness={0.3} metalness={0.35} />
-          </mesh>
-          <mesh position={[0, 0, -0.018]}>
-            <boxGeometry args={[Math.min(0.42, w / windowCols), 0.055, 0.055]} />
-            <meshStandardMaterial color="#43534e" metalness={0.55} roughness={0.45} />
-          </mesh>
-        </group>
-      ))}
+      {/* Recessed-looking window bays, merged into three meshes per building to keep the
+          draw-call count low (there can be ~60 windows per facade). */}
+      {windowGeoms.panes && (
+        <mesh geometry={windowGeoms.panes}>
+          <meshStandardMaterial color="#101c1c" emissive="#213b37" emissiveIntensity={0.16} roughness={0.3} metalness={0.35} />
+        </mesh>
+      )}
+      {windowGeoms.accents && (
+        <mesh geometry={windowGeoms.accents}>
+          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.65} roughness={0.3} metalness={0.35} />
+        </mesh>
+      )}
+      {windowGeoms.sills && (
+        <mesh geometry={windowGeoms.sills}>
+          <meshStandardMaterial color="#43534e" metalness={0.55} roughness={0.45} />
+        </mesh>
+      )}
       {/* Vertical architectural spine */}
       <mesh position={[w / 2 - 0.16, h / 2 + 0.37, d / 2 + 0.035]}>
         <boxGeometry args={[0.075, h * 0.9, 0.07]} />

@@ -1,3 +1,3 @@
-import { WorldScene } from '@/components/world/world-scene';
+import { WorldLoader } from '@/components/world/world-loader';
 
-export default function Home() { return <WorldScene />; }
+export default function Home() { return <WorldLoader />; }
