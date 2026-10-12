@@ -311,7 +311,6 @@ function StreetLamp({ x, z, rotation = 0 }: { x: number; z: number; rotation?: n
         <boxGeometry args={[0.3, 0.12, 0.22]} />
         <meshStandardMaterial color="#e5f7be" emissive="#d8f851" emissiveIntensity={2.2} />
       </mesh>
-      <pointLight position={[0.58, 2.9, 0]} color="#d8f851" intensity={0.8} distance={4} decay={2} />
       <Glow x={0.58} y={2.98} z={0} color="#f4ffcc" size={2.8} opacity={0.5} />
     </group>
   );
@@ -422,8 +421,7 @@ function CentralLandmark({ radius }: { radius: number }) {
           <meshStandardMaterial color={LIME} emissive={LIME} emissiveIntensity={0.8} metalness={0.65} />
         </mesh>
       </group>
-      <pointLight position={[0, 2.5, 0]} color={LIME} intensity={12} distance={12} decay={2} />
-      <pointLight position={[0, 0.8, 0]} color={CYAN} intensity={3} distance={7} decay={2} />
+      <pointLight position={[0, 2.5, 0]} color={LIME} intensity={9} distance={14} decay={2} />
       <Glow x={0} y={2.35} z={0} color={LIME} size={5.4} opacity={0.42} />
       <Glow x={0} y={0.9} z={0} color={CYAN} size={4.2} opacity={0.28} />
     </group>
@@ -477,7 +475,6 @@ function StationPedestal({ x, z, color }: { x: number; z: number; color: string 
         <octahedronGeometry args={[0.25, 0]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.3} metalness={0.25} roughness={0.25} />
       </mesh>
-      <pointLight position={[0, 1.5, 0]} color={color} intensity={1.1} distance={3.5} />
       <Glow x={0} y={1.78} z={0} color={color} size={2.2} opacity={0.4} />
     </group>
   );
@@ -507,7 +504,6 @@ function PortalGate({ x, z, color }: { x: number; z: number; color: string }) {
         <octahedronGeometry args={[0.34, 0]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.6} metalness={0.3} roughness={0.2} />
       </mesh>
-      <pointLight position={[0, 1.7, 0]} color={color} intensity={2.4} distance={6} />
       <Glow x={0} y={1.7} z={0} color={color} size={5} opacity={0.5} />
     </group>
   );
@@ -565,7 +561,6 @@ function VehicleMesh() {
         <boxGeometry args={[0.84, 0.055, 0.055]} />
         <meshStandardMaterial color="#27342d" metalness={0.6} roughness={0.25} />
       </mesh>
-      <pointLight position={[0, 0.3, -1.15]} color={LIME} intensity={0.65} distance={3} />
       <Glow x={-0.4} y={0.3} z={-1.18} color="#eef7d0" size={1.1} opacity={0.5} />
       <Glow x={0.4} y={0.3} z={-1.18} color="#eef7d0" size={1.1} opacity={0.5} />
       <Glow x={0} y={0.32} z={1.02} color="#ff5a4d" size={1.4} opacity={0.4} />
