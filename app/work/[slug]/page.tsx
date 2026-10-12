@@ -8,7 +8,15 @@ export function generateStaticParams() { return projects.map(({ slug }) => ({ sl
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const project = projectBySlug((await params).slug);
-  return project ? { title: `${project.title} | Soburr`, description: project.summary } : {};
+  if (!project) return {};
+  const description = project.summary;
+  return {
+    title: project.title,
+    description,
+    alternates: { canonical: `/work/${project.slug}` },
+    openGraph: { type: 'article', title: `${project.title} — Soburr`, description, url: `/work/${project.slug}` },
+    twitter: { card: 'summary_large_image', title: `${project.title} — Soburr`, description },
+  };
 }
 
 export default async function ProjectPage({ params }: { params: Promise<{ slug: string }> }) {

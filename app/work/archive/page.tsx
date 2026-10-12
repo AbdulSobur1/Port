@@ -5,8 +5,9 @@ import { forks, liveProjectCount, projects } from '@/lib/projects';
 import WorkGallery from '@/components/work/work-gallery';
 
 export const metadata: Metadata = {
-  title: 'Work Archive | Soburr',
+  title: 'Work Archive',
   description: 'Selected product and engineering work by Soburr across AI, culture, fintech, community, healthcare, media, and education.',
+  alternates: { canonical: '/work/archive' },
 };
 
 export default function WorkArchivePage() {
