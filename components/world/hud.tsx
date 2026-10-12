@@ -347,14 +347,14 @@ function TouchControls({ openZoneOrPortal }: { openZoneOrPortal: (zone: ZoneId) 
   });
 
   return (
-    <div className="world-touch" aria-label="Vehicle touch controls">
+    <div className="world-touch" role="group" aria-label="Vehicle touch controls">
       <div className="world-touch__group">
-        <button aria-label="Steer left" {...steerHold('steer-left', -1)}>◀</button>
-        <button aria-label="Accelerate" {...hold('forward', 1)}>▲</button>
-        <button aria-label="Steer right" {...steerHold('steer-right', 1)}>▶</button>
-        <button aria-label="Reverse" {...hold('reverse', -1)}>▼</button>
+        <button type="button" aria-label="Steer left" {...steerHold('steer-left', -1)}>◀</button>
+        <button type="button" aria-label="Accelerate" {...hold('forward', 1)}>▲</button>
+        <button type="button" aria-label="Steer right" {...steerHold('steer-right', 1)}>▶</button>
+        <button type="button" aria-label="Reverse" {...hold('reverse', -1)}>▼</button>
       </div>
-      <button className="world-touch__interact" onClick={() => { const zone = getUi().nearestZone; if (zone) openZoneOrPortal(zone); }}>
+      <button type="button" className="world-touch__interact" onClick={() => { const zone = getUi().nearestZone; if (zone) openZoneOrPortal(zone); }}>
         Inspect / Enter
       </button>
     </div>
@@ -401,8 +401,8 @@ export function Hud({ world }: { world: WorldLayout }) {
   return (
     <>
       <header className="world-topbar">
-        <Link href="/" className="world-mark">SOBURR<span>/03</span></Link>
-        <nav>
+        <Link href="/" className="world-mark" aria-label="Soburr home">SOBURR<span aria-hidden="true">/03</span></Link>
+        <nav aria-label="Primary">
           {TOP_NAV.map((item) => (
             <Link
               key={item.href}
@@ -413,15 +413,16 @@ export function Hud({ world }: { world: WorldLayout }) {
             </Link>
           ))}
         </nav>
-        <div className="world-status"><i />{world.name}</div>
+        <div className="world-status"><i aria-hidden="true" />{world.name}</div>
       </header>
-
-      {!panelZone && !onboarding && <ZonePrompt world={world} />}
-      {!panelZone && !onboarding && <NoticeBanner />}
-      {panelZone && <Dossier zone={panelZone} close={() => setUi({ panelZone: null })} />}
-      {onboarding && <Onboarding />}
-      <MapMenu world={world} driveTo={driveTo} onInteract={openZoneOrPortalNearest} />
-      <TouchControls openZoneOrPortal={openZoneOrPortal} />
+      <main id="world-main" className="world-main" tabIndex={-1}>
+        {!panelZone && !onboarding && <ZonePrompt world={world} />}
+        {!panelZone && !onboarding && <NoticeBanner />}
+        {panelZone && <Dossier zone={panelZone} close={() => setUi({ panelZone: null })} />}
+        {onboarding && <Onboarding />}
+        <MapMenu world={world} driveTo={driveTo} onInteract={openZoneOrPortalNearest} />
+        <TouchControls openZoneOrPortal={openZoneOrPortal} />
+      </main>
 
       <footer className="world-footer">
         <p>

@@ -12,9 +12,10 @@ export const metadata: Metadata = {
 
 export default function WorkArchivePage() {
   return (
-    <main className="portfolio-page work-page">
+    <main className="portfolio-page work-page" id="archive-content">
+      <a className="skip-link" href="#archive-content">Skip to archive</a>
       <header className="portfolio-header">
-        <Link href="/" className="brand-lockup" aria-label="Soburr home"><span className="brand-symbol">S</span><span>SOBURR</span></Link>
+        <Link href="/" className="brand-lockup" aria-label="Soburr home"><span className="brand-symbol" aria-hidden="true">S</span><span>SOBURR</span></Link>
         <nav className="portfolio-nav" aria-label="Main navigation">
           <Link href="/">Home</Link><Link href="/work">Work</Link><Link className="is-active" href="/work/archive" aria-current="page">Archive</Link><Link href="/about">About</Link><Link href="/contact">Contact</Link>
         </nav>

@@ -47,10 +47,10 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
 
   if (webgl === false) {
     return (
-      <div className="world-fallback">
+      <main className="world-fallback" id="world-main">
         <p className="case-label">SOBURR / PORTFOLIO INDEX</p>
         <h1>The interactive world needs WebGL.</h1>
-        <p>A plain listing of the same records:</p>
+        <p>This browser has WebGL disabled, so the 3D world cannot render. The same work is listed below.</p>
         <ul>
           {projects.map((project) => (
             <li key={project.slug}>
@@ -60,12 +60,13 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
           ))}
         </ul>
         <a className="case-button" href="https://github.com/AbdulSobur1" target="_blank" rel="noreferrer">GitHub profile</a>
-      </div>
+      </main>
     );
   }
 
   return (
     <div className="world-experience">
+      <a className="skip-link" href="#world-main">Skip to controls</a>
       {webgl !== null && (
         <Canvas
           key={worldId}

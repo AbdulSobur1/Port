@@ -32,7 +32,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   return <main className="portfolio-page detail-page" style={{ '--project-accent': project.color } as CSSProperties}>
     <a className="skip-link" href="#project-content">Skip to project details</a>
     <header className="portfolio-header">
-      <Link href="/" className="brand-lockup" aria-label="Soburr home"><span className="brand-symbol">S</span><span>SOBURR</span></Link>
+      <Link href="/" className="brand-lockup" aria-label="Soburr home"><span className="brand-symbol" aria-hidden="true">S</span><span>SOBURR</span></Link>
       <nav className="portfolio-nav" aria-label="Main navigation"><Link href="/">Home</Link><Link href="/work">Work</Link><Link className="is-active" href="/work/archive" aria-current="page">Archive</Link><Link href="/about">About</Link><Link href="/contact">Contact</Link></nav>
       <Link className="header-cta" href="/"> <i /> Explore my world <span aria-hidden="true">↗</span></Link>
     </header>
