@@ -75,12 +75,6 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
           dpr={lowPower ? 0.75 : 1}
           shadows={false}
           gl={{ antialias: false, powerPreference: 'high-performance' }}
-          onCreated={({ gl }) => {
-            // Shadow maps are re-rendered only when the sun moves (see Atmosphere),
-            // instead of every frame for the whole city.
-            gl.shadowMap.autoUpdate = false;
-            gl.shadowMap.needsUpdate = true;
-          }}
         >
           <color attach="background" args={[layout.theme.zenith ?? layout.theme.background]} />
           <PerfProbe />
