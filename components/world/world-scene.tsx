@@ -1,19 +1,39 @@
 'use client';
 
 import { Canvas } from '@react-three/fiber';
-import { Suspense, useEffect, useState } from 'react';
+import { PerformanceMonitor } from '@react-three/drei';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { World } from './city';
 import { ChaseCamera } from './chase-camera';
 import { Simulation } from './simulation';
 import { Hud } from './hud';
-import { setUi } from './store';
+import { createWorld, type World as PhysicsWorld } from './physics';
+import { getLayout, worldMeta, type WorldId } from './world-cities';
+import { resetVehiclePose } from './store';
 import { projects } from '@/lib/projects';
-import Link from 'next/link';
 
-export function WorldScene() {
+export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
+  const router = useRouter();
   const [webgl, setWebgl] = useState<boolean | null>(null);
+  const [reducedQuality, setReducedQuality] = useState(false);
+  const [performanceReduced, setPerformanceReduced] = useState(false);
+  const lowPower = reducedQuality || performanceReduced;
+
+  const layout = useMemo(() => getLayout(worldId), [worldId]);
+  const world = useMemo<PhysicsWorld>(() => createWorld(layout), [layout]);
+
+  // The vehicle is a module-level ref; snap it to this city's spawn on mount/change.
+  useEffect(() => {
+    resetVehiclePose(world.spawn);
+  }, [world]);
 
   useEffect(() => {
+    const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    setReducedQuality(coarsePointer || reducedMotion);
+
     try {
       const test = document.createElement('canvas');
       setWebgl(Boolean(test.getContext('webgl2') || test.getContext('webgl')));
@@ -30,7 +50,10 @@ export function WorldScene() {
         <p>A plain listing of the same records:</p>
         <ul>
           {projects.map((project) => (
-            <li key={project.slug}><Link href={`/work/${project.slug}`}>{project.number} / {project.title}</Link></li>
+            <li key={project.slug}>
+              <Link href={`/work/${project.slug}`}>{project.number} / {project.title}</Link>
+              {project.links?.demo && <> · <a href={project.links.demo} target="_blank" rel="noreferrer">live demo ↗</a></>}
+            </li>
           ))}
         </ul>
         <a className="case-button" href="https://github.com/AbdulSobur1" target="_blank" rel="noreferrer">GitHub profile</a>
@@ -42,21 +65,29 @@ export function WorldScene() {
     <div className="world-experience">
       {webgl !== null && (
         <Canvas
+          key={worldId}
           className="world-canvas"
           camera={{ position: [0, 5.4, 24], fov: 50 }}
-          dpr={[1, 1.5]}
-          shadows
-          gl={{ antialias: true, powerPreference: 'high-performance' }}
+          dpr={lowPower ? 1 : [1, 1.5]}
+          shadows={!lowPower}
+          gl={{ antialias: !lowPower, powerPreference: 'high-performance' }}
         >
-          <color attach="background" args={['#09100f']} />
+          <color attach="background" args={[layout.theme.zenith ?? layout.theme.background]} />
+          <PerformanceMonitor
+            flipflops={3}
+            onDecline={() => setPerformanceReduced(true)}
+            onIncline={() => setPerformanceReduced(false)}
+          />
           <Suspense fallback={null}>
-            <World />
-            <ChaseCamera active /><Simulation />
+            <World world={layout} lowPower={lowPower} />
+            <ChaseCamera active />
+            <Simulation world={world} onPortal={(href) => router.push(href)} />
           </Suspense>
         </Canvas>
       )}
       <div className="world-grain" />
-      <Hud />
+      <Hud world={layout} />
+      <p className="world-city-tag">{worldMeta[worldId].name} — {worldMeta[worldId].tagline}</p>
     </div>
   );
 }
