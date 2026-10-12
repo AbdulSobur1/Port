@@ -9,6 +9,7 @@ import { ChaseCamera } from './chase-camera';
 import { Simulation } from './simulation';
 import { Hud } from './hud';
 import { AdaptiveQuality } from './adaptive-quality';
+import { PerfOverlay, PerfProbe } from './diagnostics';
 import { createWorld, type World as PhysicsWorld } from './physics';
 import { getLayout, worldMeta, type WorldId } from './world-cities';
 import { resetVehiclePose } from './store';
@@ -19,6 +20,7 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
   const [webgl, setWebgl] = useState<boolean | null>(null);
   const [reducedQuality, setReducedQuality] = useState(false);
   const [performanceReduced, setPerformanceReduced] = useState(false);
+  const [debug, setDebug] = useState(false);
   const lowPower = reducedQuality || performanceReduced;
 
   const layout = useMemo(() => getLayout(worldId), [worldId]);
@@ -33,6 +35,7 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     setReducedQuality(coarsePointer || reducedMotion);
+    setDebug(new URLSearchParams(window.location.search).has('debug'));
 
     try {
       const test = document.createElement('canvas');
@@ -68,9 +71,9 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
           key={worldId}
           className="world-canvas"
           camera={{ position: [0, 5.4, 24], fov: 50 }}
-          dpr={lowPower ? 1 : [1, 1.5]}
-          shadows={!lowPower}
-          gl={{ antialias: !lowPower, powerPreference: 'high-performance' }}
+          dpr={lowPower ? 0.75 : 1}
+          shadows={false}
+          gl={{ antialias: false, powerPreference: 'high-performance' }}
           onCreated={({ gl }) => {
             // Shadow maps are re-rendered only when the sun moves (see Atmosphere),
             // instead of every frame for the whole city.
@@ -79,6 +82,7 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
           }}
         >
           <color attach="background" args={[layout.theme.zenith ?? layout.theme.background]} />
+          <PerfProbe />
           <AdaptiveQuality
             onDecline={() => setPerformanceReduced(true)}
             onIncline={() => setPerformanceReduced(false)}
@@ -92,6 +96,7 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
       )}
       <div className="world-grain" />
       <Hud world={layout} />
+      {debug && <PerfOverlay />}
       <p className="world-city-tag">{worldMeta[worldId].name} — {worldMeta[worldId].tagline}</p>
     </div>
   );

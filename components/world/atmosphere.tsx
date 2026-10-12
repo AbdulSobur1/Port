@@ -84,7 +84,7 @@ function Sky({ palette }: { palette: RefObject<DayPalette> }) {
   const bucket = useRef(-1);
 
   const starGeometry = useMemo(() => {
-    const count = 900;
+    const count = 520;
     const positions = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
       const radius = 62 + Math.random() * 34;
@@ -150,7 +150,7 @@ function Sky({ palette }: { palette: RefObject<DayPalette> }) {
 function Rain({ lowPower }: { lowPower: boolean }) {
   const mesh = useRef<THREE.InstancedMesh>(null!);
   const group = useRef<THREE.Group>(null!);
-  const count = lowPower ? 240 : 520;
+  const count = lowPower ? 160 : 320;
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const drops = useMemo(() => {
     const list: { x: number; y: number; z: number; speed: number }[] = [];
@@ -195,7 +195,7 @@ function Rain({ lowPower }: { lowPower: boolean }) {
 function Snow({ lowPower }: { lowPower: boolean }) {
   const points = useRef<THREE.Points>(null!);
   const group = useRef<THREE.Group>(null!);
-  const count = lowPower ? 260 : 620;
+  const count = lowPower ? 170 : 380;
   const data = useMemo(() => {
     const positions = new Float32Array(count * 3);
     const spec: { x: number; y: number; z: number; phase: number; speed: number }[] = [];
