@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import { siteAuthor, siteDescription, siteName, siteTitle, siteUrl } from '@/lib/site';
 import './globals.css';
 
@@ -31,7 +32,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <Script src="/_vercel/insights/script.js" strategy="afterInteractive" />
+        <Script src="/_vercel/speed-insights/script.js" strategy="afterInteractive" />
+      </body>
     </html>
   );
 }
