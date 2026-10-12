@@ -1,29 +1,37 @@
 # Soburr — Interactive 3D Portfolio
 
-A Next.js App Router portfolio built with React, TypeScript, Three.js, and React Three Fiber. The main page is an interactive driving world; project records are available as accessible editorial pages as well.
+A Next.js App Router portfolio built with React, TypeScript, Three.js, and React Three Fiber. The landing experience is a drivable 3D world split into four cities; every project is also available as an accessible editorial page.
 
 ## Requirements
 
-- Node.js 20.9 or newer (recommended for the current Next.js release)
-- npm
+- Node.js 20.9 or newer
+- [pnpm](https://pnpm.io) 10 or newer (this repo is pnpm-managed; do not use `npm install`, which would ignore `pnpm-lock.yaml`)
 
 ## Getting started
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm dev
 ```
 
 Open http://localhost:3000.
 
-## Validation
+## Scripts
 
-```bash
-npm run typecheck
-npm run build
-```
+- `pnpm dev` — start the development server
+- `pnpm build` — production build
+- `pnpm start` — serve the production build
+- `pnpm typecheck` — `tsc --noEmit`
+- `pnpm test` — compile and run the deterministic physics/city tests (25 tests)
 
-The lint script is intentionally not included until ESLint is configured for the installed Next.js version.
+## Worlds
+
+The landing page is one canvas with four drivable cities, linked by portal gates and the top navigation:
+
+- `/` — **Hub**: spawn point, orientation, and city gates
+- `/work` — **Work city**: every project is a station; the archive and case studies live at `/work/archive` and `/work/[slug]`
+- `/about` — **Gardens**
+- `/contact` — **Signal**
 
 ## Controls
 
@@ -40,71 +48,23 @@ The lint script is intentionally not included until ESLint is configured for the
 
 Touch controls are provided for coarse-pointer devices.
 
+## Rendering quality
+
+Rendering starts conservatively on touch-first devices and when reduced motion is requested. Runtime frame sampling lowers the pixel ratio when performance declines and restores it when performance recovers. The scene keeps a small, fixed set of dynamic lights; emissive materials and additive glow sprites carry the neon look. Append `?debug=1` to any world URL for a live FPS / draw-call / GPU readout.
+
 ## Structure
 
-- `app/`: App Router pages and global styles
-- `app/work/`: project index and project detail routes
-- `components/world/`: 3D scene, city environment, simulation, physics, camera, HUD, and UI state
-- `lib/projects.ts`: centralized project content
+- `app/` — App Router pages and global styles
+- `app/work/` — project index, archive, and project detail routes
+- `components/world/` — the drivable world: physics, simulation, city renderer, atmosphere, audio, HUD, and camera
+- `components/work/` — editorial project components
+- `lib/projects.ts` — the project dataset
+- `tests/` — deterministic physics and city-integrity tests
 
-## Project content and claims
+## Content
 
-Project records are editorial summaries. Add live demos, repository links, screenshots, or measured outcomes only when they are verified and available. The abstract artwork on project cards is generated with CSS and is not a screenshot of a shipped product.
+Project descriptions and technology labels come from `lib/projects.ts`. Keep claims and external links evidence-based. Conceptual artwork on the editorial pages is generated with CSS as a visual treatment; it is not a screenshot of a deployed product.
 
-## Phase 5 integration notes
+## Deployment
 
-- The destination map exposes its expanded state and a controlled list region for assistive technology.
-- The destination list and information panels are scrollable on short viewports instead of being clipped.
-- Touch controls use pointer capture and release their active input on pointer cancellation or lost capture, reducing stuck steering/throttle states on touch devices.
-- Opening the destination map dismisses onboarding and any open dossier so competing overlays are not shown together.
-
-The source was syntax-transpiled during this pass. A full type-check and production build still need to be run after a complete dependency installation.
-
-
-## Phase 6: performance and integration polish
-
-- Canvas rendering starts in a conservative quality mode on touch-first devices and when reduced motion is requested.
-- Runtime performance monitoring can lower rendering cost when frame performance declines and restore quality when performance recovers.
-- The chase camera reuses vector objects in its frame loop to reduce recurring allocations.
-- Removed per-building rooftop point lights; emissive architectural accents remain, reducing the number of dynamic lights in the scene.
-
-These are performance-oriented source changes. Confirm behavior on target devices and run the type-check and production build locally before deployment.
-
-## Phase 6: performance and rendering resilience
-
-- Rendering quality starts conservatively on touch-first devices and when the visitor requests reduced motion.
-- Runtime performance monitoring can lower the renderer's pixel ratio, antialiasing, and shadow workload when frame performance declines.
-- The chase camera reuses its working vectors rather than allocating a new position vector on every rendered frame.
-- Removed per-building rooftop point lights; emissive accents preserve the skyline's visual highlights with fewer dynamic lights.
-
-Validation note: run `npm install`, `npm run typecheck`, and `npm run build` in a complete local dependency environment before deploying. The available dependency tree in the editing environment is incomplete, so a full project type-check/build could not be verified here.
-
-
-## Portfolio archive and case-study pages
-
-The `/work` route presents the project archive using the Soburr dark teal / lime visual system. Category controls filter the existing project records client-side. Selecting a card opens `/work/[slug]`, which includes project context, role/team/stack facts, conceptual project artwork, decisions, and previous/next navigation.
-
-The artwork on these pages is generated with CSS as a visual treatment; it is not a screenshot of a deployed product. Project descriptions and technology labels come from `lib/projects.ts`. Keep claims and external project links evidence-based.
-
-## Validation note
-
-Run `npm ci`, `npm run typecheck`, and `npm run build` in an environment with network access and the dependencies installed. This workspace could not complete dependency installation, so the changes in this archive have not been verified with a full TypeScript check or production build.
-
-## Integration verification pass
-
-- Project archive filters now use explicit project classifications instead of searching summary prose, so category filters remain predictable as copy changes.
-- Global driving shortcuts no longer intercept keyboard activation/navigation when a link, button, textbox, or other interactive control has focus.
-- Project filter controls have a visible keyboard focus indicator.
-
-Validation status for this archive: package metadata and route/project slug consistency were checked. A complete dependency install did not finish in the available environment, so `npm run typecheck`, `npm run build`, and live browser behavior remain unverified. Run the validation commands above after installing dependencies locally.
-
-
-## Phase 8 quality pass
-
-- Project archive filters are now declared alongside each project record rather than maintained in a separate slug-to-category map. This keeps filtering behavior close to the data it describes and makes new projects easier to classify.
-- Explicit `CSSProperties` type imports are used in the work pages and gallery instead of relying on the global `React` namespace.
-- The archive's `web` category includes all five currently listed project records; the more specific AI, fintech, and platform filters use the classifications declared in `lib/projects.ts`.
-
-### Validation note
-
-A complete dependency install, TypeScript check, production build, and browser test must still be run in an environment where the package registry is reachable. A ZIP/source review is not a substitute for runtime verification.
+Deployed on Vercel, which builds with pnpm from `pnpm-lock.yaml`. Run `pnpm install`, `pnpm typecheck`, and `pnpm build` locally before pushing.
