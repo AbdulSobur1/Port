@@ -110,6 +110,7 @@ button { color: inherit; }
 /* Phase 4 — accessible project discovery and editorial case-study polish */
 .skip-link { position: fixed; z-index: 20; top: .75rem; left: .75rem; transform: translateY(-180%); padding: .7rem 1rem; background: var(--lime); color: var(--ink); font: 500 .75rem "DM Mono", monospace; }
 .skip-link:focus { transform: translateY(0); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 .work-page { min-height: 100svh; padding: 0 clamp(1.2rem, 6vw, 6rem); background: var(--ink); color: var(--mist); }
 .work-header, .work-footer { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1.5rem 0; border-bottom: 1px solid var(--line); font: 500 .7rem "DM Mono", monospace; }
 .work-wordmark { font-size: 1rem; letter-spacing: -.07em; }
