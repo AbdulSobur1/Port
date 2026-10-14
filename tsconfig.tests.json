@@ -15,5 +15,5 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./*"] }
   },
-  "include": ["tests/**/*.ts", "lib/projects.ts", "components/world/physics.ts", "components/world/world-layout.ts", "components/world/world-cities.ts"]
+  "include": ["tests/**/*.ts", "lib/projects.ts", "components/world/physics.ts", "components/world/world-layout.ts", "components/world/world-cities.ts", "components/world/geo.ts"]
 }

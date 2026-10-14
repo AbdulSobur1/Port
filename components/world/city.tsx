@@ -7,12 +7,13 @@ import { useFrame } from '@react-three/fiber';
 import { vehicle as vehicleState } from './store';
 import type { BuildingSpec, WorldLayout } from './world-layout';
 import { Atmosphere as SkyRig, Glow } from './atmosphere';
+import { MAP_SPAN_METERS } from './geo';
 
 const LIME = '#d8f851';
 const CYAN = '#6de0dd';
 const INK = '#0b1415';
 
-function HubFloor() {
+function HubFloor({ showBase }: { showBase: boolean }) {
   const roadMarks = useMemo(() => {
     const marks: { x: number; z: number; rotation: number; length: number }[] = [];
     for (let z = -22; z <= 22; z += 3.2) {
@@ -30,10 +31,12 @@ function HubFloor() {
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]} receiveShadow>
-        <planeGeometry args={[64, 64]} />
-        <meshStandardMaterial color="#101a19" roughness={0.98} metalness={0.02} />
-      </mesh>
+      {showBase && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]} receiveShadow>
+          <planeGeometry args={[64, 64]} />
+          <meshStandardMaterial color="#101a19" roughness={0.98} metalness={0.02} />
+        </mesh>
+      )}
       {/* The main streets frame the plaza instead of covering it with a debug grid. */}
       {[0, -9.1, 9.1].map((x) => (
         <group key={`road-x-${x}`}>
@@ -90,14 +93,16 @@ function HubFloor() {
 }
 
 /** A simpler city floor: ground plane, a ring road around the landmark, and a north-south lane. */
-function DistrictFloor({ world }: { world: WorldLayout }) {
+function DistrictFloor({ world, showBase }: { world: WorldLayout; showBase: boolean }) {
   const radius = world.landmark ? world.landmark.radius + 2.2 : 4;
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]} receiveShadow>
-        <planeGeometry args={[64, 64]} />
-        <meshStandardMaterial color="#101a19" roughness={0.98} metalness={0.02} />
-      </mesh>
+      {showBase && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]} receiveShadow>
+          <planeGeometry args={[64, 64]} />
+          <meshStandardMaterial color="#101a19" roughness={0.98} metalness={0.02} />
+        </mesh>
+      )}
       {/* North–south arterial from the spawn gate toward the centre. */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.07, 0]} receiveShadow>
         <planeGeometry args={[6, 64]} />
@@ -138,6 +143,42 @@ function DistrictFloor({ world }: { world: WorldLayout }) {
   );
 }
 
+/**
+ * Zebra crossings at the four cardinal road approaches. Purely decorative: the
+ * collision layer (physics.ts) is untouched, and every bar is merged into a single
+ * mesh, so a whole crossing costs one draw call.
+ */
+function Crossings({ distance, roadWidth }: { distance: number; roadWidth: number }) {
+  const geometry = useMemo(() => {
+    const count = Math.max(3, Math.floor(roadWidth / 0.85));
+    const spacing = roadWidth / count;
+    const bar = new THREE.BoxGeometry(0.42, 0.02, 1.5);
+    const bars: THREE.BufferGeometry[] = [];
+    const place = (x: number, z: number, alongX: boolean) => {
+      for (let i = 0; i < count; i++) {
+        const across = (i - (count - 1) / 2) * spacing;
+        const g = bar.clone();
+        if (alongX) g.rotateY(Math.PI / 2);
+        g.translate(alongX ? x : x + across, 0, alongX ? z + across : z);
+        bars.push(g);
+      }
+    };
+    place(0, distance, false);
+    place(0, -distance, false);
+    place(distance, 0, true);
+    place(-distance, 0, true);
+    bar.dispose();
+    return mergeGeometries(bars, false);
+  }, [distance, roadWidth]);
+
+  if (!geometry) return null;
+  return (
+    <mesh geometry={geometry} position={[0, -0.04, 0]}>
+      <meshBasicMaterial color="#d0d5c5" transparent opacity={0.34} />
+    </mesh>
+  );
+}
+
 function GroundDetails({ world }: { world: WorldLayout }) {
   if (world.id === 'hub') {
     const roads = [0, -9.1, 9.1];
@@ -156,6 +197,7 @@ function GroundDetails({ world }: { world: WorldLayout }) {
             </group>
           );
         })}
+        <Crossings distance={7} roadWidth={5.5} />
         {/* Crosswalk at the arrival plaza */}
         <group position={[0, 0, 14]}>
           {Array.from({ length: 7 }, (_, i) => i - 3).map((n) => (
@@ -177,6 +219,7 @@ function GroundDetails({ world }: { world: WorldLayout }) {
           <meshStandardMaterial color="#2b3835" roughness={0.9} metalness={0.06} />
         </mesh>
       ))}
+      <Crossings distance={radius + 6.7} roadWidth={6} />
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radius, radius + 0.14, 128]} />
         <meshBasicMaterial color={LIME} transparent opacity={0.22} />
@@ -568,7 +611,8 @@ function VehicleMesh() {
   );
 }
 
-function CitySkirt({ world }: { world: WorldLayout }) {
+function CitySkirt({ world, show }: { world: WorldLayout; show: boolean }) {
+  if (!show) return null;
   const fade = world.theme.fog[2];
   return (
     <group>
@@ -591,15 +635,32 @@ function CitySkirt({ world }: { world: WorldLayout }) {
   );
 }
 
-export function World({ world, lowPower = false }: { world: WorldLayout; lowPower?: boolean }) {
+/**
+ * The real map, drawn as the base ground beneath the designed city. Rendered only
+ * when a live MapLibre texture is available; otherwise the procedural floor above
+ * remains the ground, so the world is never left without a floor.
+ */
+function MapPlane({ texture }: { texture?: THREE.Texture | null }) {
+  if (!texture) return null;
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.18, 0]}>
+      <planeGeometry args={[MAP_SPAN_METERS, MAP_SPAN_METERS]} />
+      <meshBasicMaterial map={texture} toneMapped={false} />
+    </mesh>
+  );
+}
+
+export function World({ world, lowPower = false, mapTexture }: { world: WorldLayout; lowPower?: boolean; mapTexture?: THREE.Texture | null }) {
+  const hasMap = Boolean(mapTexture);
   return (
     <group>
       <SkyRig theme={world.theme} lowPower={lowPower} />
       <pointLight position={[-12, 8, -8]} intensity={7} color="#477c80" distance={26} />
       <pointLight position={[12, 7, 12]} intensity={5} color="#7766b0" distance={22} />
-      {world.id === 'hub' ? <HubFloor /> : <DistrictFloor world={world} />}
+      <MapPlane texture={mapTexture} />
+      {world.id === 'hub' ? <HubFloor showBase={!hasMap} /> : <DistrictFloor world={world} showBase={!hasMap} />}
       <GroundDetails world={world} />
-      <CitySkirt world={world} />
+      <CitySkirt world={world} show={!hasMap} />
       {world.buildings.map((spec, index) => <Building key={`${spec.x}-${spec.z}`} spec={spec} index={index} />)}
       <PerimeterWall world={world} />
       <UrbanDetails world={world} />

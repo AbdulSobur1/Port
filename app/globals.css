@@ -26,6 +26,9 @@ button { color: inherit; }
 .world-debug { position: absolute; z-index: 5; left: clamp(1.2rem, 4vw, 4.2rem); bottom: 1.5rem; display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; color: var(--lime); font: 500 .62rem "DM Mono", monospace; letter-spacing: .05em; text-transform: uppercase; pointer-events: none; }
 .world-debug span { background: rgba(9, 16, 15, .82); border: 1px solid rgba(237, 241, 235, .22); padding: .24rem .4rem; }
 .world-debug__gpu { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.world-debug--map { left: auto; right: clamp(1.2rem, 4vw, 4.2rem); bottom: 2.4rem; }
+.world-map-credit { position: absolute; z-index: 3; left: clamp(1.2rem, 4vw, 4.2rem); bottom: .55rem; margin: 0; color: #6f7d78; font: 400 .58rem "DM Mono", monospace; letter-spacing: .04em; pointer-events: none; }
+.world-map-credit::before { content: "map "; text-transform: uppercase; letter-spacing: .1em; color: #8b968d; }
 .world-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 1.5rem; inset: auto clamp(1.2rem, 4vw, 4.2rem) 1.5rem; font: 400 .68rem/1.45 "DM Mono", monospace; color: #aeb9b1; }
 .world-footer p { margin: 0; max-width: 31rem; }
 .world-footer kbd { border: 1px solid #66736a; padding: .14rem .28rem; font: inherit; color: var(--mist); }

@@ -22,7 +22,7 @@ Open http://localhost:3000.
 - `pnpm build` — production build
 - `pnpm start` — serve the production build
 - `pnpm typecheck` — `tsc --noEmit`
-- `pnpm test` — compile and run the deterministic physics/city tests (25 tests)
+- `pnpm test` — compile and run the deterministic physics, city, and coordinate-system tests (34 tests)
 
 ## Worlds
 
@@ -47,6 +47,32 @@ The landing page is one canvas with four drivable cities, linked by portal gates
 - `Escape`: close panels and release drive inputs
 
 Touch controls are provided for coarse-pointer devices.
+
+## The real-world map and the coordinate system
+
+The ground is a **real OpenStreetMap view** rendered by [MapLibre GL JS](https://maplibre.org/) into an offscreen canvas and used as a texture under the designed city — so the world sits on genuine geography rather than a decorative grid.
+
+All geometry shares one documented coordinate system, defined in `components/world/geo.ts`:
+
+- **World space** is right-handed and measured in metres: `+X` = east, `+Z` = north, `+Y` = up, with `(0, 0)` at the city centre.
+- `(0, 0)` is anchored to a real WGS84 point, `WORLD_ORIGIN`. The default is central Abuja, Nigeria.
+- `worldToLatLng` / `latLngToWorld` convert with an equirectangular projection that is accurate to well under a centimetre across a city block; `metersPerDegreeLat/Lng` use the full WGS84 series expansion.
+- The projection is unit-tested in `tests/geo.test.ts`.
+
+If MapLibre, the network, or WebGL is unavailable, the map degrades gracefully to the fully procedural ground — the city is never left without a floor.
+
+### Map configuration
+
+Copy `.env.example` to `.env.local` to override the defaults:
+
+| Variable | Meaning |
+| --- | --- |
+| `NEXT_PUBLIC_WORLD_MAP` | `off` disables the real map and keeps the procedural ground |
+| `NEXT_PUBLIC_MAP_STYLE_URL` | Your own MapLibre style URL (vector or raster); overrides the keyless OSM raster |
+| `NEXT_PUBLIC_WORLD_ORIGIN` | `"lat,lng"` — the real-world point world `(0,0)` projects onto |
+| `NEXT_PUBLIC_SITE_URL` | Canonical site origin used for metadata and `sitemap.xml` |
+
+Map data © OpenStreetMap contributors.
 
 ## Rendering quality
 

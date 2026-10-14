@@ -10,6 +10,7 @@ import { Simulation } from './simulation';
 import { Hud } from './hud';
 import { AdaptiveQuality } from './adaptive-quality';
 import { PerfOverlay, PerfProbe } from './diagnostics';
+import { useWorldMapTexture } from './map-ground';
 import { createWorld, type World as PhysicsWorld } from './physics';
 import { getLayout, worldMeta, type WorldId } from './world-cities';
 import { resetVehiclePose } from './store';
@@ -25,6 +26,7 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
 
   const layout = useMemo(() => getLayout(worldId), [worldId]);
   const world = useMemo<PhysicsWorld>(() => createWorld(layout), [layout]);
+  const worldMap = useWorldMapTexture(!lowPower);
 
   // The vehicle is a module-level ref; snap it to this city's spawn on mount/change.
   useEffect(() => {
@@ -83,7 +85,7 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
             onIncline={() => setPerformanceReduced(false)}
           />
           <Suspense fallback={null}>
-            <World world={layout} lowPower={lowPower} />
+            <World world={layout} lowPower={lowPower} mapTexture={worldMap.texture} />
             <ChaseCamera active />
             <Simulation world={world} onPortal={(href) => router.push(href)} />
           </Suspense>
@@ -91,7 +93,9 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
       )}
       <div className="world-grain" />
       <Hud world={layout} />
+      {worldMap.status === 'ready' && <p className="world-map-credit">{worldMap.attribution}</p>}
       {debug && <PerfOverlay />}
+      {debug && <p className="world-debug world-debug--map">map: {worldMap.status}</p>}
       <p className="world-city-tag">{worldMeta[worldId].name} — {worldMeta[worldId].tagline}</p>
     </div>
   );
