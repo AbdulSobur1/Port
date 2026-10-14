@@ -42,11 +42,19 @@ The landing page is one canvas with four drivable cities, linked by portal gates
 - `Space`: brake
 - `E`: inspect the nearest station
 - `M`: toggle the destination map
+- `P`: browse every project (works without driving)
 - `H`: horn
 - `R`: reset vehicle and navigation
 - `Escape`: close panels and release drive inputs
 
 Touch controls are provided for coarse-pointer devices.
+
+## Browsing without driving
+
+The 3D city is a way in, not the only way. First-time visitors get a short welcome card (dismissed once, and reopenable from **How to drive**) explaining the controls and offering **Browse projects** directly.
+
+**Projects** in the top bar, the footer button, or the `P` key opens a full-screen directory: every project with its category, summary, stack, and Case study / Live demo / Source links, plus a **Drive here** button that hands the car to autopilot for that station. Opening any panel pauses the car, and every panel closes with `Escape`. The full editorial archive is always available at `/work/archive`.
+
 
 ## The real-world map and the coordinate system
 
@@ -76,7 +84,7 @@ Map data © OpenStreetMap contributors.
 
 ## Rendering quality
 
-Rendering starts conservatively on touch-first devices and when reduced motion is requested. Runtime frame sampling lowers the pixel ratio when performance declines and restores it when performance recovers. The scene keeps a small, fixed set of dynamic lights; emissive materials and additive glow sprites carry the neon look. Append `?debug=1` to any world URL for a live FPS / draw-call / GPU readout.
+Rendering starts conservatively on touch-first devices and when reduced motion is requested. Runtime frame sampling lowers the pixel ratio when performance declines and restores it when performance recovers. The scene keeps a small, fixed set of dynamic lights; emissive materials and additive glow sprites carry the neon look. Repeated geometry — road markings, plaza seams, district ring marks, street lamps, and trees — is drawn with `InstancedMesh`, so hundreds of parts cost a handful of draw calls, and all station pads share a single animation frame. Append `?debug=1` to any world URL for a live FPS / draw-call / GPU readout.
 
 ## Structure
 

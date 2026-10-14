@@ -354,3 +354,56 @@ button { color: inherit; }
 .fork-card__actions a { color: var(--lime); font: 500 .62rem "DM Mono", monospace; border-bottom: 1px solid currentColor; padding-bottom: .1rem; }
 .fork-card__actions a:hover { color: #fff; }
 @media (max-width: 620px) { .fork-list { grid-template-columns: 1fr; } }
+
+/* Phase 6 — cohesive visual identity for the drive-mode HUD.
+   The world chrome now shares the same surface/edge language as the editorial pages,
+   and the welcome + project directory carry the larger, calmer typography. */
+.world-experience {
+  --hud-surface: rgba(7, 16, 20, .93);
+  --hud-edge: rgba(115, 204, 204, .24);
+  --hud-text: #edf5f0;
+  --hud-dim: #a8bdc0;
+  --hud-radius: .7rem;
+}
+
+.world-panel, .world-welcome, .world-map, .world-directory {
+  background: var(--hud-surface);
+  border: 1px solid var(--hud-edge);
+  border-radius: var(--hud-radius);
+}
+.world-button { border-color: var(--hud-edge); border-radius: .35rem; }
+
+.world-welcome { left: clamp(1.2rem, 5.8vw, 8rem); }
+.world-welcome h1 { max-width: 14ch; font: 600 clamp(2.85rem, 5.6vw, 5rem)/.9 "Playfair Display", serif; letter-spacing: -.065em; }
+.world-welcome h1 em { color: var(--lime); font-style: italic; }
+.world-welcome__lede { max-width: 34rem; margin: 1.1rem 0 1.35rem; color: #ccd6cf; font-size: clamp(.92rem, 1.05vw, 1.02rem); line-height: 1.62; }
+.world-welcome__lede strong { color: var(--hud-text); font-weight: 600; }
+.world-welcome__controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: .55rem 1.1rem; margin: 0 0 1.35rem; padding: 1rem 0 0; list-style: none; border-top: 1px solid var(--line); }
+.world-welcome__controls li { display: flex; align-items: center; gap: .55rem; color: var(--hud-dim); font: 400 .72rem "DM Mono", monospace; }
+.world-welcome__keys { display: inline-flex; gap: .2rem; }
+.world-welcome__keys kbd, .world-welcome kbd { border: 1px solid #66736a; border-radius: .2rem; padding: .15rem .34rem; color: var(--lime); font: 500 .66rem "DM Mono", monospace; }
+
+.world-panel__paused { display: flex; align-items: center; gap: .5rem; margin: 0 0 1.1rem; color: #9fb0a6; font: 400 .66rem "DM Mono", monospace; }
+.world-panel__paused i { width: .5rem; height: .5rem; border-radius: 50%; background: var(--gold); box-shadow: 0 0 10px var(--gold); }
+
+.world-directory { position: absolute; z-index: 4; inset: 0; display: block; width: min(74rem, 100%); margin: 0 auto; padding: clamp(4.5rem, 9vh, 6.5rem) clamp(1.2rem, 4vw, 4.2rem) clamp(2rem, 6vh, 4rem); overflow-y: auto; overscroll-behavior: contain; background: linear-gradient(180deg, rgba(5, 11, 15, .97), rgba(5, 11, 15, .94)); border: 0; border-radius: 0; }
+.world-directory h2 { margin: 0; font: 600 clamp(1.8rem, 3.4vw, 2.9rem)/1 "Playfair Display", serif; letter-spacing: -.05em; }
+.world-directory__list { display: grid; gap: .9rem; margin: 1.5rem 0 0; padding: 0; list-style: none; }
+.world-directory__item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1.2rem; align-items: center; padding: 1.15rem 1.25rem; border: 1px solid rgba(237, 241, 235, .14); border-left: 3px solid var(--project-accent); border-radius: .4rem; background: rgba(237, 241, 235, .022); }
+.world-directory__num { color: var(--project-accent); font: 600 1.15rem "DM Mono", monospace; }
+.world-directory__cat { margin: 0 0 .2rem; color: var(--project-accent); font: 500 .62rem "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+.world-directory__body h3 { margin: 0 0 .4rem; font: 600 clamp(1.35rem, 2.4vw, 1.95rem)/1.05 "Playfair Display", serif; letter-spacing: -.045em; }
+.world-directory__summary { max-width: 48rem; margin: 0 0 .6rem; color: #b9c4bb; font-size: .9rem; line-height: 1.6; }
+.world-directory__tags { display: flex; flex-wrap: wrap; gap: .35rem; }
+.world-directory__tags span { border: 1px solid rgba(237, 241, 235, .18); border-radius: .2rem; padding: .24rem .42rem; color: #9fb0a6; font: 400 .6rem "DM Mono", monospace; }
+.world-directory__actions { display: flex; flex-direction: column; gap: .55rem; align-items: flex-start; min-width: 8.5rem; }
+.world-directory__foot { margin-top: 1.7rem; padding-top: 1.2rem; border-top: 1px solid var(--line); }
+.world-directory :focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; }
+
+@media (max-width: 720px) {
+  .world-directory { padding: 4.6rem 1rem 2rem; }
+  .world-directory__item { grid-template-columns: auto minmax(0, 1fr); gap: .8rem; padding: 1rem; }
+  .world-directory__actions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .world-directory__summary { margin-bottom: .5rem; }
+}
+@media (prefers-reduced-motion: reduce) { .world-button { transition: none; } }

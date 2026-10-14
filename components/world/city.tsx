@@ -2,16 +2,80 @@
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { vehicle as vehicleState } from './store';
-import type { BuildingSpec, WorldLayout } from './world-layout';
+import type { BuildingSpec, Station, WorldLayout } from './world-layout';
 import { Atmosphere as SkyRig, Glow } from './atmosphere';
 import { MAP_SPAN_METERS } from './geo';
 
 const LIME = '#d8f851';
 const CYAN = '#6de0dd';
 const INK = '#0b1415';
+
+/**
+ * One draw call for many identical, static parts. Transforms are baked once and
+ * never change, so the instance matrices are uploaded on mount only. This replaces
+ * the hundreds of individual meshes that previously formed the street furniture
+ * and road markings.
+ */
+function Instances({ geometry, material, transforms }: {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  transforms: THREE.Matrix4[];
+}) {
+  const ref = useRef<THREE.InstancedMesh>(null);
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    for (let i = 0; i < transforms.length; i++) mesh.setMatrixAt(i, transforms[i]);
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [transforms]);
+  return <instancedMesh ref={ref} args={[geometry, material, transforms.length]} frustumCulled={false} />;
+}
+
+/** Bake a parent pose × local pose into a single matrix (three's T·R·S order). */
+function poseMatrix(
+  px: number, py: number, pz: number, parentRotY: number, parentScale: number,
+  local: { p: readonly [number, number, number]; r?: readonly [number, number, number] }
+): THREE.Matrix4 {
+  const parent = new THREE.Object3D();
+  parent.position.set(px, py, pz);
+  parent.rotation.y = parentRotY;
+  parent.scale.setScalar(parentScale);
+  parent.updateMatrix();
+  const child = new THREE.Object3D();
+  child.position.set(local.p[0], local.p[1], local.p[2]);
+  if (local.r) child.rotation.set(local.r[0], local.r[1], local.r[2]);
+  child.updateMatrix();
+  return parent.matrix.clone().multiply(child.matrix);
+}
+
+/* Shared, immutable ground-marking geometry/materials — reused by every instanced batch. */
+const groundMarkGeo = new THREE.PlaneGeometry(0.075, 1);
+const groundMarkMat = new THREE.MeshBasicMaterial({ color: '#d0d5c5', transparent: true, opacity: 0.35 });
+const seamGeo = new THREE.PlaneGeometry(0.018, 12);
+const seamMat = new THREE.MeshBasicMaterial({ color: '#45605a', transparent: true, opacity: 0.3 });
+const ringMarkGeo = new THREE.BoxGeometry(0.075, 0.02, 1.05);
+const ringMarkMat = new THREE.MeshBasicMaterial({ color: '#d0d5c5', transparent: true, opacity: 0.3 });
+
+/** Street furniture, expressed as instanced parts so a whole street is a few draw calls. */
+const furniture = {
+  lamp: [
+    { geo: new THREE.CylinderGeometry(0.055, 0.09, 3.2, 8), mat: new THREE.MeshStandardMaterial({ color: '#3d4d47', metalness: 0.72, roughness: 0.3 }), local: { p: [0, 1.6, 0] as const } },
+    { geo: new THREE.BoxGeometry(0.72, 0.07, 0.1), mat: new THREE.MeshStandardMaterial({ color: '#52645a', metalness: 0.6, roughness: 0.35 }), local: { p: [0.28, 3.08, 0] as const, r: [0, 0, -0.18] as const } },
+    { geo: new THREE.BoxGeometry(0.3, 0.12, 0.22), mat: new THREE.MeshStandardMaterial({ color: '#e5f7be', emissive: '#d8f851', emissiveIntensity: 2.2 }), local: { p: [0.58, 3.0, 0] as const } },
+  ],
+  tree: [
+    { geo: new THREE.CylinderGeometry(0.68, 0.78, 0.36, 8), mat: new THREE.MeshStandardMaterial({ color: '#26332e', roughness: 0.9 }), local: { p: [0, 0.18, 0] as const } },
+    { geo: new THREE.CylinderGeometry(0.48, 0.57, 0.18, 8), mat: new THREE.MeshStandardMaterial({ color: '#4c5b4e', roughness: 0.9 }), local: { p: [0, 0.42, 0] as const } },
+    { geo: new THREE.CylinderGeometry(0.09, 0.15, 1.95, 7), mat: new THREE.MeshStandardMaterial({ color: '#57483a', roughness: 1 }), local: { p: [0, 1.45, 0] as const } },
+    { geo: new THREE.IcosahedronGeometry(0.86, 1), mat: new THREE.MeshStandardMaterial({ color: '#2d5141', roughness: 0.92 }), local: { p: [0, 2.45, 0] as const } },
+    { geo: new THREE.IcosahedronGeometry(0.48, 1), mat: new THREE.MeshStandardMaterial({ color: '#3b694b', roughness: 0.92 }), local: { p: [0.28, 2.72, -0.12] as const } },
+    { geo: new THREE.IcosahedronGeometry(0.46, 1), mat: new THREE.MeshStandardMaterial({ color: '#244b3c', roughness: 0.92 }), local: { p: [-0.26, 2.35, 0.18] as const } },
+  ],
+} as const;
 
 function HubFloor({ showBase }: { showBase: boolean }) {
   const roadMarks = useMemo(() => {
@@ -28,7 +92,31 @@ function HubFloor({ showBase }: { showBase: boolean }) {
     }
     return marks;
   }, []);
-
+  const markTransforms = useMemo(() => roadMarks.map((mark) => {
+    const o = new THREE.Object3D();
+    o.position.set(mark.x, -0.045, mark.z);
+    o.rotation.set(-Math.PI / 2, 0, mark.rotation);
+    o.scale.set(1, mark.length, 1);
+    o.updateMatrix();
+    return o.matrix.clone();
+  }), [roadMarks]);
+  const seamTransforms = useMemo(() => {
+    const out: THREE.Matrix4[] = [];
+    for (let i = 0; i < 13; i++) {
+      const n = i - 6;
+      const along = new THREE.Object3D();
+      along.position.set(n * 2.2, -0.03, 0);
+      along.rotation.set(-Math.PI / 2, 0, 0);
+      along.updateMatrix();
+      out.push(along.matrix.clone());
+      const across = new THREE.Object3D();
+      across.position.set(0, -0.029, n * 2.2);
+      across.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
+      across.updateMatrix();
+      out.push(across.matrix.clone());
+    }
+    return out;
+  }, []);
   return (
     <group>
       {showBase && (
@@ -62,12 +150,7 @@ function HubFloor({ showBase }: { showBase: boolean }) {
           </mesh>
         </group>
       ))}
-      {roadMarks.map((mark, i) => (
-        <mesh key={i} rotation={[-Math.PI / 2, 0, mark.rotation]} position={[mark.x, -0.045, mark.z]}>
-          <planeGeometry args={[0.075, mark.length]} />
-          <meshBasicMaterial color="#d0d5c5" transparent opacity={0.35} />
-        </mesh>
-      ))}
+      <Instances geometry={groundMarkGeo} material={groundMarkMat} transforms={markTransforms} />
       {/* Inlaid plaza rings guide the eye toward the central landmark. */}
       {[5.2, 6.1, 13.8, 14.1, 17.2].map((r, i) => (
         <mesh key={r} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.035 + i * 0.001, 0]}>
@@ -75,19 +158,8 @@ function HubFloor({ showBase }: { showBase: boolean }) {
           <meshBasicMaterial color={i === 2 ? LIME : '#52716a'} transparent opacity={i === 2 ? 0.24 : 0.2} />
         </mesh>
       ))}
-      {/* Subtle plaza tile seams */}
-      {Array.from({ length: 13 }, (_, i) => i - 6).map((n) => (
-        <group key={`tile-${n}`}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[n * 2.2, -0.03, 0]}>
-            <planeGeometry args={[0.018, 12]} />
-            <meshBasicMaterial color="#45605a" transparent opacity={0.3} />
-          </mesh>
-          <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[0, -0.029, n * 2.2]}>
-            <planeGeometry args={[0.018, 12]} />
-            <meshBasicMaterial color="#45605a" transparent opacity={0.3} />
-          </mesh>
-        </group>
-      ))}
+      {/* Subtle plaza tile seams (single instanced mesh) */}
+      <Instances geometry={seamGeo} material={seamMat} transforms={seamTransforms} />
     </group>
   );
 }
@@ -95,6 +167,15 @@ function HubFloor({ showBase }: { showBase: boolean }) {
 /** A simpler city floor: ground plane, a ring road around the landmark, and a north-south lane. */
 function DistrictFloor({ world, showBase }: { world: WorldLayout; showBase: boolean }) {
   const radius = world.landmark ? world.landmark.radius + 2.2 : 4;
+  const ringMarkTransforms = useMemo(() => Array.from({ length: 24 }, (_, i) => {
+    const angle = (i / 24) * Math.PI * 2;
+    const markRadius = radius + 2.75;
+    const o = new THREE.Object3D();
+    o.position.set(Math.sin(angle) * (markRadius - 0.6), -0.045, Math.cos(angle) * (markRadius + 0.6));
+    o.rotation.set(0, -angle, 0);
+    o.updateMatrix();
+    return o.matrix.clone();
+  }), [radius]);
   return (
     <group>
       {showBase && (
@@ -129,16 +210,7 @@ function DistrictFloor({ world, showBase }: { world: WorldLayout; showBase: bool
         <ringGeometry args={[radius + 5.5, radius + 5.6, 128]} />
         <meshBasicMaterial color="#6c8378" transparent opacity={0.32} />
       </mesh>
-      {Array.from({ length: 24 }, (_, i) => i).map((i) => {
-        const angle = (i / 24) * Math.PI * 2;
-        const markRadius = radius + 2.75;
-        return (
-          <mesh key={i} rotation={[0, -angle, 0]} position={[Math.sin(angle) * (markRadius - 0.6), -0.045, Math.cos(angle) * (markRadius + 0.6)]}>
-            <boxGeometry args={[0.075, 0.02, 1.05]} />
-            <meshBasicMaterial color="#d0d5c5" transparent opacity={0.3} />
-          </mesh>
-        );
-      })}
+      <Instances geometry={ringMarkGeo} material={ringMarkMat} transforms={ringMarkTransforms} />
     </group>
   );
 }
@@ -339,62 +411,21 @@ function Building({ spec, index }: { spec: BuildingSpec; index: number }) {
   );
 }
 
-function StreetLamp({ x, z, rotation = 0 }: { x: number; z: number; rotation?: number }) {
-  return (
-    <group position={[x, 0, z]} rotation={[0, rotation, 0]}>
-      <mesh position={[0, 1.6, 0]} castShadow>
-        <cylinderGeometry args={[0.055, 0.09, 3.2, 8]} />
-        <meshStandardMaterial color="#3d4d47" metalness={0.72} roughness={0.3} />
-      </mesh>
-      <mesh position={[0.28, 3.08, 0]} rotation={[0, 0, -0.18]}>
-        <boxGeometry args={[0.72, 0.07, 0.1]} />
-        <meshStandardMaterial color="#52645a" metalness={0.6} roughness={0.35} />
-      </mesh>
-      <mesh position={[0.58, 3.0, 0]}>
-        <boxGeometry args={[0.3, 0.12, 0.22]} />
-        <meshStandardMaterial color="#e5f7be" emissive="#d8f851" emissiveIntensity={2.2} />
-      </mesh>
-      <Glow x={0.58} y={2.98} z={0} color="#f4ffcc" size={2.8} opacity={0.5} />
-    </group>
-  );
-}
-
-function PlanterTree({ x, z, scale = 1 }: { x: number; z: number; scale?: number }) {
-  return (
-    <group position={[x, 0, z]} scale={scale}>
-      <mesh position={[0, 0.18, 0]}>
-        <cylinderGeometry args={[0.68, 0.78, 0.36, 8]} />
-        <meshStandardMaterial color="#26332e" roughness={0.9} />
-      </mesh>
-      <mesh position={[0, 0.42, 0]}>
-        <cylinderGeometry args={[0.48, 0.57, 0.18, 8]} />
-        <meshStandardMaterial color="#4c5b4e" roughness={0.9} />
-      </mesh>
-      <mesh position={[0, 1.45, 0]} castShadow>
-        <cylinderGeometry args={[0.09, 0.15, 1.95, 7]} />
-        <meshStandardMaterial color="#57483a" roughness={1} />
-      </mesh>
-      <mesh position={[0, 2.45, 0]} castShadow>
-        <icosahedronGeometry args={[0.86, 1]} />
-        <meshStandardMaterial color="#2d5141" roughness={0.92} />
-      </mesh>
-      <mesh position={[0.28, 2.72, -0.12]} castShadow>
-        <icosahedronGeometry args={[0.48, 1]} />
-        <meshStandardMaterial color="#3b694b" roughness={0.92} />
-      </mesh>
-      <mesh position={[-0.26, 2.35, 0.18]} castShadow>
-        <icosahedronGeometry args={[0.46, 1]} />
-        <meshStandardMaterial color="#244b3c" roughness={0.92} />
-      </mesh>
-    </group>
-  );
-}
-
+/** Street lamps and trees as instanced parts — one draw call per part instead of per prop. */
 function UrbanDetails({ world }: { world: WorldLayout }) {
+  const lampParts = useMemo(() => furniture.lamp.map((part) =>
+    world.lampPositions.map(([x, z], i) => poseMatrix(x, 0, z, i % 2 ? Math.PI : 0, 1, part.local)),
+  ), [world.lampPositions]);
+  const treeParts = useMemo(() => furniture.tree.map((part) =>
+    world.treePositions.map(([x, z, scale]) => poseMatrix(x, 0, z, 0, scale, part.local)),
+  ), [world.treePositions]);
   return (
     <group>
-      {world.lampPositions.map(([x, z], i) => <StreetLamp key={`lamp-${i}`} x={x} z={z} rotation={i % 2 ? Math.PI : 0} />)}
-      {world.treePositions.map(([x, z, scale], i) => <PlanterTree key={`tree-${i}`} x={x} z={z} scale={scale} />)}
+      {furniture.lamp.map((part, i) => <Instances key={`lamp-${i}`} geometry={part.geo} material={part.mat} transforms={lampParts[i]} />)}
+      {world.lampPositions.map(([x, z], i) => (
+        <Glow key={`lampglow-${i}`} x={x + (i % 2 ? -0.58 : 0.58)} y={2.98} z={z} color="#f4ffcc" size={2.8} opacity={0.5} />
+      ))}
+      {furniture.tree.map((part, i) => <Instances key={`tree-${i}`} geometry={part.geo} material={part.mat} transforms={treeParts[i]} />)}
     </group>
   );
 }
@@ -471,35 +502,41 @@ function CentralLandmark({ radius }: { radius: number }) {
   );
 }
 
-function StationPad({ x, z, color }: { x: number; z: number; color: string }) {
-  const ring = useRef<THREE.Mesh>(null!);
+/** All station pads share a single animation frame instead of one useFrame each. */
+function StationPads({ stations }: { stations: Station[] }) {
+  const rings = useRef<(THREE.Mesh | null)[]>([]);
   useFrame(({ clock }) => {
-    if (ring.current) {
-      const pulse = 1 + Math.sin(clock.elapsedTime * 1.5 + x + z) * 0.025;
-      ring.current.scale.setScalar(pulse);
+    const t = clock.elapsedTime * 1.5;
+    for (let i = 0; i < stations.length; i++) {
+      const mesh = rings.current[i];
+      if (mesh) mesh.scale.setScalar(1 + Math.sin(t + stations[i].x + stations[i].z) * 0.025);
     }
   });
   return (
-    <group position={[x, 0.035, z]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[2.25, 64]} />
-        <meshStandardMaterial color="#14211e" roughness={0.8} metalness={0.2} />
-      </mesh>
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[1.85, 1.94, 64]} />
-        <meshBasicMaterial color={color} transparent opacity={0.82} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
-        <ringGeometry args={[0.72, 0.78, 48]} />
-        <meshBasicMaterial color={color} transparent opacity={0.38} />
-      </mesh>
-      {[0, 1, 2, 3].map((i) => (
-        <mesh key={i} position={[Math.cos(i * Math.PI / 2) * 2.05, 0.08, Math.sin(i * Math.PI / 2) * 2.05]}>
-          <boxGeometry args={[0.12, 0.16, 0.12]} />
-          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
-        </mesh>
+    <>
+      {stations.map((station, i) => (
+        <group key={station.zone} position={[station.x, 0.035, station.z]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[2.25, 64]} />
+            <meshStandardMaterial color="#14211e" roughness={0.8} metalness={0.2} />
+          </mesh>
+          <mesh ref={(node) => { rings.current[i] = node; }} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[1.85, 1.94, 64]} />
+            <meshBasicMaterial color={station.color} transparent opacity={0.82} />
+          </mesh>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
+            <ringGeometry args={[0.72, 0.78, 48]} />
+            <meshBasicMaterial color={station.color} transparent opacity={0.38} />
+          </mesh>
+          {[0, 1, 2, 3].map((n) => (
+            <mesh key={n} position={[Math.cos(n * Math.PI / 2) * 2.05, 0.08, Math.sin(n * Math.PI / 2) * 2.05]}>
+              <boxGeometry args={[0.12, 0.16, 0.12]} />
+              <meshStandardMaterial color={station.color} emissive={station.color} emissiveIntensity={0.8} />
+            </mesh>
+          ))}
+        </group>
       ))}
-    </group>
+    </>
   );
 }
 
@@ -664,10 +701,10 @@ export function World({ world, lowPower = false, mapTexture }: { world: WorldLay
       {world.buildings.map((spec, index) => <Building key={`${spec.x}-${spec.z}`} spec={spec} index={index} />)}
       <PerimeterWall world={world} />
       <UrbanDetails world={world} />
+      <StationPads stations={world.stations} />
       {world.landmark && <CentralLandmark radius={world.landmark.radius} />}
       {world.stations.map((station) => (
-        <group key={station.zone}>
-          <StationPad x={station.x} z={station.z} color={station.color} />
+        <group key={`fixture-${station.zone}`}>
           <StationPedestal x={station.x} z={station.z} color={station.color} />
           {station.kind === 'portal' && <PortalGate x={station.x} z={station.z} color={station.color} />}
         </group>

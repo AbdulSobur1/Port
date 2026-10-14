@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { Station, WorldLayout, ZoneId } from './world-layout';
-import { useUi, setUi, getUi, vehicle, input, resetVehiclePose } from './store';
+import { useUi, setUi, getUi, vehicle, input, resetVehiclePose, hasSeenWelcome, markWelcomeSeen } from './store';
 import { unlockAudio, setSoundEnabled, playHorn } from './audio';
 import { projects } from '@/lib/projects';
 
@@ -21,10 +21,11 @@ function shouldIgnoreKeyboardTarget(target: EventTarget | null): boolean {
 type ControlsCallbacks = {
   openZoneOrPortal: (zone: ZoneId) => void;
   resetVehicle: () => void;
+  toggleDirectory: () => void;
 };
 
 export function useControls(enabled: boolean, world: WorldLayout, callbacks: ControlsCallbacks) {
-  const { openZoneOrPortal, resetVehicle } = callbacks;
+  const { openZoneOrPortal, resetVehicle, toggleDirectory } = callbacks;
   useEffect(() => {
     if (!enabled) return;
 
@@ -49,15 +50,16 @@ export function useControls(enabled: boolean, world: WorldLayout, callbacks: Con
       if (key === 'a' || key === 'arrowleft') { input.left = true; event.preventDefault(); }
       if (key === 'd' || key === 'arrowright') { input.right = true; event.preventDefault(); }
       if (key === ' ') { input.brake = true; event.preventDefault(); }
-      if (key === 'e' && !ui.onboarding && !ui.panelZone) {
+      if (key === 'e' && !ui.onboarding && !ui.panelZone && !ui.directoryOpen) {
         const zone = ui.nearestZone;
         if (zone) openZoneOrPortal(zone);
       }
       if (key === 'r') resetVehicle();
       if (key === 'h') honk();
-      if (key === 'm') setUi({ mapOpen: !ui.mapOpen, onboarding: false, panelZone: null });
+      if (key === 'p') toggleDirectory();
+      if (key === 'm') setUi({ mapOpen: !ui.mapOpen, onboarding: false, panelZone: null, directoryOpen: false });
       if (key === 'escape') {
-        setUi({ panelZone: null, mapOpen: false, onboarding: false });
+        setUi({ panelZone: null, mapOpen: false, onboarding: false, directoryOpen: false });
         releaseDriveInput();
       }
     };
@@ -183,16 +185,17 @@ function Dossier({ zone, close }: { zone: ZoneId; close: () => void }) {
   const dossier = dossierFor(zone);
   if (!dossier) return null;
   return (
-    <aside className="world-panel" role="dialog" aria-label={dossier.title}>
+    <aside className="world-panel" role="dialog" aria-modal="false" aria-label={dossier.title}>
       <p className="world-panel__eyebrow">{dossier.eyebrow}</p>
       <h1>{dossier.title}</h1>
       <p className="world-panel__copy">{dossier.body}</p>
       <div className="world-panel__tags">{dossier.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
+      <p className="world-panel__paused" role="status"><i aria-hidden="true" />Car paused — resuming puts you back exactly where you parked.</p>
       <div className="world-panel__actions">
         {dossier.actions.map((action) => action.external
           ? <a key={action.label} className="world-link" href={action.href} target="_blank" rel="noreferrer">{action.label} <span aria-hidden="true">↗</span></a>
           : <Link key={action.label} className="world-link" href={action.href}>{action.label} <span aria-hidden="true">→</span></Link>)}
-        <button className="world-button" onClick={close}>Close</button>
+        <button className="world-button world-button--primary" onClick={close}>Resume driving</button>
       </div>
     </aside>
   );
@@ -230,29 +233,89 @@ function NoticeBanner() {
   );
 }
 
-/* ---------- Onboarding ---------- */
+/* ---------- Welcome / first-visit instructions ---------- */
 
-function Onboarding() {
-  const { onboarding } = useUi();
-  if (!onboarding) return null;
+const CONTROL_KEYS: { keys: string[]; label: string }[] = [
+  { keys: ['W', 'A', 'S', 'D'], label: 'drive the car' },
+  { keys: ['E'], label: 'inspect a station' },
+  { keys: ['M'], label: 'destination map' },
+  { keys: ['P'], label: 'browse all projects' },
+  { keys: ['R'], label: 'reset position' },
+];
+
+function Welcome({ onDrive, onBrowse }: { onDrive: () => void; onBrowse: () => void }) {
   return (
-    <div className="world-welcome">
-      <p className="world-panel__eyebrow">Soburr / interactive portfolio</p>
-      <h1>The world is the interface.</h1>
-      <p className="world-panel__copy">
-        Drive the city. Portals lead to the Work, Gardens, and Signal cities; every station opens work, background, skills, or a way to reach Soburr.
+    <div className="world-welcome" role="dialog" aria-modal="false" aria-labelledby="world-welcome-title">
+      <p className="world-panel__eyebrow">Soburr — software engineer &amp; product builder</p>
+      <h1 id="world-welcome-title">I build products. <em>Drive through them.</em></h1>
+      <p className="world-welcome__lede">
+        This is the portfolio of <strong>Abdul Sobur</strong>, working across AI, fintech, platforms, and community.
+        The 3D city <em>is</em> the map: every station is a project. Drive to them — or read the work without
+        touching the controls.
       </p>
-      <div className="world-panel__tags">
-        <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive</span>
-        <span><kbd>E</kbd> inspect / enter</span>
-        <span><kbd>H</kbd> horn</span>
-        <span><kbd>R</kbd> reset</span>
-        <span><kbd>M</kbd> map</span>
-      </div>
+      <ul className="world-welcome__controls">
+        {CONTROL_KEYS.map((item) => (
+          <li key={item.label}>
+            <span className="world-welcome__keys">
+              {item.keys.map((k) => <kbd key={k}>{k}</kbd>)}
+            </span>
+            <span>{item.label}</span>
+          </li>
+        ))}
+      </ul>
       <div className="world-panel__actions">
-        <button className="world-button world-button--primary" onClick={() => setUi({ onboarding: false })}>Start driving</button>
-        <Link className="world-button" href="/contact">Take me somewhere</Link>
+        <button className="world-button world-button--primary" onClick={onDrive}>Start driving</button>
+        <button className="world-button" onClick={onBrowse}>Browse projects</button>
+        <Link className="world-link" href="/about">About me →</Link>
       </div>
+    </div>
+  );
+}
+
+/* ---------- Project directory (browse without driving) ---------- */
+
+function ProjectDirectory({ world, driveTo, close }: { world: WorldLayout; driveTo: (station: Station) => void; close: () => void }) {
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => { panel.current?.focus(); }, []);
+  return (
+    <div className="world-directory" role="dialog" aria-modal="false" aria-labelledby="world-directory-title" ref={panel} tabIndex={-1}>
+      <header className="world-directory__head">
+        <div>
+          <p className="world-panel__eyebrow">Projects — browse without driving</p>
+          <h2 id="world-directory-title">Every build, in one list</h2>
+        </div>
+        <button className="world-button" onClick={close}>Close</button>
+      </header>
+      <p className="world-directory__intro">
+        Open a case study, visit a live demo, or let the car drive you to that project&apos;s station in {world.name}.
+      </p>
+      <ul className="world-directory__list">
+        {projects.map((project) => {
+          const station = world.stations.find((s) => s.zone === `project:${project.slug}`);
+          return (
+            <li className="world-directory__item" key={project.slug} style={{ ['--project-accent' as string]: project.color }}>
+              <span className="world-directory__num" aria-hidden="true">{project.number}</span>
+              <div className="world-directory__body">
+                <p className="world-directory__cat">{project.category}{project.status === 'live' ? ' · live' : ''}</p>
+                <h3>{project.title}</h3>
+                <p className="world-directory__summary">{project.summary}</p>
+                <div className="world-directory__tags">
+                  {project.stack.slice(0, 4).map((tag) => <span key={tag}>{tag}</span>)}
+                </div>
+              </div>
+              <div className="world-directory__actions">
+                <Link className="world-link" href={`/work/${project.slug}`}>Case study →</Link>
+                {project.links?.demo && <a className="world-link" href={project.links.demo} target="_blank" rel="noreferrer">Live demo ↗</a>}
+                {project.links?.repo && <a className="world-link" href={project.links.repo} target="_blank" rel="noreferrer">Source ↗</a>}
+                {station && <button className="world-button" onClick={() => { close(); driveTo(station); }}>Drive here</button>}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <footer className="world-directory__foot">
+        <Link className="world-link" href="/work/archive">Open the full archive ✦</Link>
+      </footer>
     </div>
   );
 }
@@ -370,11 +433,16 @@ const TOP_NAV: { href: string; label: string }[] = [
 ];
 
 export function Hud({ world }: { world: WorldLayout }) {
-  const { panelZone, onboarding, soundOn } = useUi();
+  const { panelZone, onboarding, directoryOpen, soundOn } = useUi();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => { setSoundEnabled(soundOn); }, [soundOn]);
+
+  // Returning visitors skip the welcome card; new visitors get it once, after mount.
+  useEffect(() => {
+    if (!hasSeenWelcome()) setUi({ onboarding: true });
+  }, []);
 
   const openZoneOrPortal = (zone: ZoneId) => {
     const station = world.stations.find((s) => s.zone === zone);
@@ -382,7 +450,7 @@ export function Hud({ world }: { world: WorldLayout }) {
       router.push(station.href);
       return;
     }
-    setUi({ panelZone: zone, onboarding: false, mapOpen: false, autopilotRequest: null, autopilotLabel: null, mode: 'drive', notice: null });
+    setUi({ panelZone: zone, onboarding: false, mapOpen: false, directoryOpen: false, autopilotRequest: null, autopilotLabel: null, mode: 'drive', notice: null });
   };
 
   const driveTo = (station: Station) => {
@@ -390,19 +458,33 @@ export function Hud({ world }: { world: WorldLayout }) {
       router.push(station.href);
       return;
     }
-    setUi({ onboarding: false, panelZone: null, mapOpen: false, notice: null, autopilotRequest: { zone: station.zone, label: station.label }, autopilotLabel: station.label, mode: 'autopilot' });
+    setUi({ onboarding: false, panelZone: null, mapOpen: false, directoryOpen: false, notice: null, autopilotRequest: { zone: station.zone, label: station.label }, autopilotLabel: station.label, mode: 'autopilot' });
   };
+
+  const openDirectory = () => setUi({ directoryOpen: true, onboarding: false, panelZone: null, mapOpen: false, notice: null });
+  const toggleDirectory = () => {
+    const open = getUi().directoryOpen;
+    setUi({ directoryOpen: !open, onboarding: false, panelZone: null, mapOpen: false, notice: null });
+  };
+  const dismissWelcome = () => { markWelcomeSeen(); setUi({ onboarding: false }); };
 
   const resetVehicle = () => resetVehiclePose(world.spawn);
   const openZoneOrPortalNearest = () => { const zone = getUi().nearestZone; if (zone) openZoneOrPortal(zone); };
 
-  useControls(true, world, { openZoneOrPortal, resetVehicle });
+  useControls(true, world, { openZoneOrPortal, resetVehicle, toggleDirectory });
 
   return (
     <>
       <header className="world-topbar">
         <Link href="/" className="world-mark" aria-label="Soburr home">SOBURR<span aria-hidden="true">/03</span></Link>
         <nav aria-label="Primary">
+          <button
+            className={directoryOpen ? 'world-navlink world-navlink--active' : 'world-navlink'}
+            aria-expanded={directoryOpen}
+            onClick={toggleDirectory}
+          >
+            Projects
+          </button>
           {TOP_NAV.map((item) => (
             <Link
               key={item.href}
@@ -416,20 +498,23 @@ export function Hud({ world }: { world: WorldLayout }) {
         <div className="world-status"><i aria-hidden="true" />{world.name}</div>
       </header>
       <main id="world-main" className="world-main" tabIndex={-1}>
-        {!panelZone && !onboarding && <ZonePrompt world={world} />}
-        {!panelZone && !onboarding && <NoticeBanner />}
+        {!panelZone && !onboarding && !directoryOpen && <ZonePrompt world={world} />}
+        {!panelZone && !onboarding && !directoryOpen && <NoticeBanner />}
         {panelZone && <Dossier zone={panelZone} close={() => setUi({ panelZone: null })} />}
-        {onboarding && <Onboarding />}
+        {directoryOpen && <ProjectDirectory world={world} driveTo={driveTo} close={() => setUi({ directoryOpen: false })} />}
+        {onboarding && <Welcome onDrive={dismissWelcome} onBrowse={openDirectory} />}
         <MapMenu world={world} driveTo={driveTo} onInteract={openZoneOrPortalNearest} />
         <TouchControls openZoneOrPortal={openZoneOrPortal} />
       </main>
 
       <footer className="world-footer">
         <p>
-          <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>E</kbd> inspect/enter · <kbd>H</kbd> horn · <kbd>R</kbd> reset · <kbd>M</kbd> map
+          <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive · <kbd>E</kbd> inspect/enter · <kbd>M</kbd> map · <kbd>P</kbd> projects · <kbd>R</kbd> reset
         </p>
         <div className="world-controls">
           <Link className="world-button" href="/">Hub</Link>
+          <button className="world-button" onClick={openDirectory} aria-expanded={directoryOpen}>Projects</button>
+          <button className="world-button" onClick={() => setUi({ onboarding: true, directoryOpen: false, panelZone: null, mapOpen: false })}>How to drive</button>
           <button className="world-button" onClick={toggleSound} aria-pressed={soundOn}>
             {soundOn ? 'Sound on' : 'Sound off'}
           </button>

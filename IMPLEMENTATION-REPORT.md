@@ -83,3 +83,104 @@ These were largely delivered in earlier commits and remain in place (skip links,
 
 - Photoreal GLB/HDRI asset pass — explicitly descoped in favour of procedural-only assets.
 - In-browser performance profiling and visual sign-off (no browser available here).
+
+---
+
+# Directive pass — audit, performance, clarity, and identity
+
+A second, separately-scoped pass working from the visitor feedback that the world
+*lags, feels too heavy and complicated, has an unintuitive car/navigation, unclear
+icons, no way to pause and inspect projects, a dev-vs-game identity clash, welcome
+type that is too small, and incohesive colour*. The 3D-city concept is preserved;
+nothing about the driving model or collision changed.
+
+## Phase 1 — Audit
+
+Read every world system end to end (`world-scene`, `hud`, `store`, `simulation`,
+`chase-camera`, `adaptive-quality`, `diagnostics`, `world-loader`, `world-layout`,
+`world-cities`, `physics`, `city`, `atmosphere`, `globals.css`, the app routes and
+content modules). Findings that drove the work below:
+
+- The welcome copy was small and buried; there was no first-run persistence.
+- The only way to reach a project was to drive to its station (or the hidden `/work/archive`).
+- Street furniture and road markings were one mesh per part — the largest avoidable draw-call cost.
+- HUD chrome used a different surface/edge language from the editorial pages.
+- Ten station pads each ran their own `useFrame`.
+
+## Phase 2 — Performance
+
+- `components/world/city.tsx` gains a small `Instances` helper (an `InstancedMesh` whose
+  matrices are baked once on mount). It now draws:
+  - hub road markings (was ~90 meshes → 1),
+  - plaza tile seams (26 → 1),
+  - district roundabout markings (24 → 1),
+  - all street-lamp parts (3 draw calls for every lamp),
+  - all tree parts (6 draw calls for every tree).
+- Station pads were consolidated from ten `useFrame` callbacks into one (`StationPads`).
+- Material/geometry definitions moved to module scope so they are created once.
+- No changes to lights, shadows, dpr caps, or the adaptive-quality sampler — the gains
+  are purely a lower, flatter object/draw-call count.
+
+## Phase 3 — Easier to understand
+
+- The welcome card (`Welcome` in `hud.tsx`) is rewritten: a large Playfair headline
+  ("I build products. Drive through them."), a plain-language lede naming the domains,
+  a key/action legend, and three clear actions — **Start driving**, **Browse projects**,
+  **About me**. It shows on first visit only (`hasSeenWelcome` / `markWelcomeSeen` in
+  `store.ts`, `localStorage`-backed) and can be reopened from **How to drive**.
+- `onboarding` now defaults to `false` and is raised after mount only for new visitors,
+  avoiding a flash for returning ones.
+
+## Phase 4 — Car ↔ project interaction
+
+- The dossier is a labelled dialog (`role="dialog"`, `aria-modal="false"`), gains a
+  "Car paused" status line, and its primary action reads **Resume driving**.
+- The car brakes for the welcome and the directory as well as the dossier
+  (`simulation.tsx`), so inspecting never fights the controls. `Escape` closes any
+  overlay and releases held drive inputs.
+
+## Phase 5 — Direct project directory
+
+- New `ProjectDirectory` overlay lists every project from `lib/projects.ts` with its
+  number, category/status, summary, stack, and Case study / Live demo / Source links
+  (live demo and source only when the URLs exist), plus **Drive here** to hand the car
+  to autopilot. Reachable from the top-bar **Projects**, the footer, and the `P` key.
+- Links to the full editorial archive (`/work/archive`) are present in the directory,
+  the welcome, and the footer.
+
+## Phase 6 — Cohesive visual identity
+
+- `app/globals.css` introduces world HUD tokens (`--hud-surface`, `--hud-edge`,
+  `--hud-text`, `--hud-dim`, `--hud-radius`) that match the editorial surface/edge
+  language, applied consistently to the dossier, map, welcome, and directory.
+- The welcome and directory carry a larger, calmer type scale (Playfair display type,
+  mono labels) to break the "game HUD first" impression while keeping the drive controls.
+
+## Phases 7–9 — Responsiveness, physics, verification
+
+- **Physics/collision (Phase 8): untouched.** The full test suite — reachability,
+  no-clip sweep, autopilot routing — still passes, which is the regression guard.
+- **Responsiveness/a11y (Phase 7):** new overlays use dialogs, labels, `aria-expanded`,
+  focus-visible outlines, and mobile breakpoints; the existing skip link, `<main>`, and
+  safe-area insets are unchanged.
+- **End-to-end (Phase 9):** see the honest limitation below — a browser/GPU is required
+  to time frames and eyeball the result; that cannot be done in this environment.
+
+## Verification (this pass)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Types | `tsc --noEmit` | exit 0 |
+| Tests | `tsc -p tsconfig.tests.json && node --test "tests-dist/tests/*.test.js"` | 34 / 34 pass |
+| Build | `next build` | exit 0, 33 routes |
+
+## Honest limitations (this pass)
+
+- **No browser/GPU here.** The claimed performance effect (fewer draw calls, one
+  animation loop for pads) is a structural property of the code — it is not measured
+  frame-rate. Confirm with `?debug=1` on a real device.
+- Visual polish (exact spacing, contrast of the new overlays at each breakpoint) is
+  reasoned from CSS, not observed.
+- The directory's **Drive here** routes to stations that exist in the current city;
+  projects without a station in that city still link to their case study and demo.
+

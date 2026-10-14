@@ -11,6 +11,8 @@ export type UiState = {
   nearestZone: ZoneId | null;
   panelZone: ZoneId | null; // active dossier overlay
   onboarding: boolean; // controls intro / instructions overlay
+  /** The "browse without driving" project list overlay. */
+  directoryOpen: boolean;
   honkTick: number;
   autopilotLabel: string | null;
   autopilotRequest: { zone: ZoneId; label: string } | null;
@@ -21,12 +23,37 @@ export type UiState = {
   notice: string | null;
 };
 
+/**
+ * Whether the visitor has already dismissed the welcome card. Stored outside the
+ * reactive state because it only affects the initial mount, never a render.
+ */
+const WELCOME_KEY = 'soburr.world.seen-welcome';
+
+export function hasSeenWelcome(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    return window.localStorage.getItem(WELCOME_KEY) === '1';
+  } catch {
+    return true;
+  }
+}
+
+export function markWelcomeSeen() {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(WELCOME_KEY, '1');
+  } catch {
+    /* storage disabled — the welcome simply reappears next visit */
+  }
+}
+
 const listeners = new Set<() => void>();
 let state: UiState = {
   mode: 'drive',
   nearestZone: null,
   panelZone: null,
-  onboarding: true,
+  onboarding: false,
+  directoryOpen: false,
   honkTick: 0,
   autopilotLabel: null,
   autopilotRequest: null,
@@ -90,6 +117,7 @@ export function resetVehiclePose(pose: { x: number; z: number; yaw: number }) {
     autopilotRequest: null,
     autopilotLabel: null,
     panelZone: null,
+    directoryOpen: false,
     nearestZone: null,
     mode: 'drive',
     notice: null,

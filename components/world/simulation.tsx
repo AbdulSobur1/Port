@@ -87,7 +87,7 @@ export function Simulation({ world, onPortal }: { world: World; onPortal?: (href
       }
     }
 
-    if (!autopilotActive && (ui.panelZone || ui.onboarding)) {
+    if (!autopilotActive && (ui.panelZone || ui.onboarding || ui.directoryOpen)) {
       // The world is paused for UI interaction, but any residual velocity is gently removed.
       world.stepVehicle(v, dt, { power: 0, brake: true, steerCmd: 0 }, null);
     } else if (!autopilotActive) {
