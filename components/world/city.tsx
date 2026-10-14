@@ -7,6 +7,8 @@ import { useFrame } from '@react-three/fiber';
 import { vehicle as vehicleState } from './store';
 import type { BuildingSpec, Station, WorldLayout } from './world-layout';
 import { Atmosphere as SkyRig, Glow } from './atmosphere';
+import { AssetLayer } from './asset-layer';
+import { WORLD_ASSETS_ENABLED } from './assets';
 import { MAP_SPAN_METERS } from './geo';
 
 const LIME = '#d8f851';
@@ -412,7 +414,7 @@ function Building({ spec, index }: { spec: BuildingSpec; index: number }) {
 }
 
 /** Street lamps and trees as instanced parts — one draw call per part instead of per prop. */
-function UrbanDetails({ world }: { world: WorldLayout }) {
+function UrbanDetails({ world, lamps = true }: { world: WorldLayout; lamps?: boolean }) {
   const lampParts = useMemo(() => furniture.lamp.map((part) =>
     world.lampPositions.map(([x, z], i) => poseMatrix(x, 0, z, i % 2 ? Math.PI : 0, 1, part.local)),
   ), [world.lampPositions]);
@@ -421,8 +423,8 @@ function UrbanDetails({ world }: { world: WorldLayout }) {
   ), [world.treePositions]);
   return (
     <group>
-      {furniture.lamp.map((part, i) => <Instances key={`lamp-${i}`} geometry={part.geo} material={part.mat} transforms={lampParts[i]} />)}
-      {world.lampPositions.map(([x, z], i) => (
+      {lamps && furniture.lamp.map((part, i) => <Instances key={`lamp-${i}`} geometry={part.geo} material={part.mat} transforms={lampParts[i]} />)}
+      {lamps && world.lampPositions.map(([x, z], i) => (
         <Glow key={`lampglow-${i}`} x={x + (i % 2 ? -0.58 : 0.58)} y={2.98} z={z} color="#f4ffcc" size={2.8} opacity={0.5} />
       ))}
       {furniture.tree.map((part, i) => <Instances key={`tree-${i}`} geometry={part.geo} material={part.mat} transforms={treeParts[i]} />)}
@@ -700,7 +702,8 @@ export function World({ world, lowPower = false, mapTexture }: { world: WorldLay
       <CitySkirt world={world} show={!hasMap} />
       {world.buildings.map((spec, index) => <Building key={`${spec.x}-${spec.z}`} spec={spec} index={index} />)}
       <PerimeterWall world={world} />
-      <UrbanDetails world={world} />
+      <UrbanDetails world={world} lamps={!WORLD_ASSETS_ENABLED} />
+      <AssetLayer world={world} lowPower={lowPower} />
       <StationPads stations={world.stations} />
       {world.landmark && <CentralLandmark radius={world.landmark.radius} />}
       {world.stations.map((station) => (

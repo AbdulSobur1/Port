@@ -184,3 +184,36 @@ content modules). Findings that drove the work below:
 - The directory's **Drive here** routes to stations that exist in the current city;
   projects without a station in that city still link to their case study and demo.
 
+## Asset pass — real, licensed 3D world
+
+A follow-up pass replaced the flat placeholder look with real open-source assets.
+
+- **Research & licensing.** Surveyed Poly Haven, ambientCG, Kenney, Quaternius and the
+  Khronos sample set; verified each licence at source. Selected only **CC0 1.0** assets
+  so the build carries no attribution debt. See `docs/world-asset-research.md` and
+  `docs/THIRD_PARTY_ASSETS.md`.
+- **Assets acquired** into `public/world/` (34.1 MB): 5 glTF props, 5 PBR material sets
+  (diffuse + `nor_gl` normal + packed `arm`), and 2 HDRIs.
+- **`components/world/assets.ts`** — manifest + cache-backed loaders. Deliberately **not**
+  suspense-based: textures and models load through plain three.js loaders and push a
+  re-render, so the procedural base world never blanks while assets download.
+- **`components/world/asset-layer.tsx`** — additive photoreal layer: HDRI image-based
+  lighting (dusk/night by city hour, skipped on low power), PBR road/paving planes, shared
+  facade cladding on every building (UVs scaled to a constant real-world tile), real street
+  lamps on the existing collision-safe positions, and curated hub furniture.
+- **Physics untouched.** No colliders, layout data, or route data changed; the 34-test
+  suite passes unchanged, which is the regression guard for driving.
+- **Fallback.** The procedural lamps are suppressed only when the asset layer is on, and
+  `NEXT_PUBLIC_WORLD_ASSETS=off` restores the previous world exactly.
+
+## Verification (asset pass)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Types | `tsc --noEmit` | exit 0 |
+| Tests | `pnpm test` | 34 / 34 pass |
+| Build | `pnpm build` | exit 0, 33 routes |
+
+Limitations are recorded in `docs/world-validation.md` (no browser/GPU here: perceived
+scale/orientation and frame-rate are unverified and not claimed).
+

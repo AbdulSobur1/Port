@@ -82,6 +82,17 @@ Copy `.env.example` to `.env.local` to override the defaults:
 
 Map data © OpenStreetMap contributors.
 
+## Open-source assets
+
+The world is dressed with real, PBR-textured 3D assets, all **CC0 1.0** — roads, paving, facades and an HDRI environment (Poly Haven), plus glTF street props: lamp posts, benches, planters, hydrants and barriers. The procedural base city always renders underneath, and each asset layer fades in as it loads, so the world never blanks while downloading. Set `NEXT_PUBLIC_WORLD_ASSETS=off` for the fully procedural fallback (no downloads).
+
+- `public/world/models/` — glTF props (auto-normalised to a target height at load)
+- `public/world/materials/` — PBR surface sets (diffuse / normal / packed ARM)
+- `public/world/environment/` — HDRI skies used for image-based lighting
+- `docs/world-asset-research.md` — how these were selected
+- `docs/THIRD_PARTY_ASSETS.md` — full provenance and licence text
+- `docs/world-art-direction.md`, `docs/world-validation.md` — direction and QA
+
 ## Rendering quality
 
 Rendering starts conservatively on touch-first devices and when reduced motion is requested. Runtime frame sampling lowers the pixel ratio when performance declines and restores it when performance recovers. The scene keeps a small, fixed set of dynamic lights; emissive materials and additive glow sprites carry the neon look. Repeated geometry — road markings, plaza seams, district ring marks, street lamps, and trees — is drawn with `InstancedMesh`, so hundreds of parts cost a handful of draw calls, and all station pads share a single animation frame. Append `?debug=1` to any world URL for a live FPS / draw-call / GPU readout.
