@@ -10,6 +10,7 @@ import { Simulation } from './simulation';
 import { Hud } from './hud';
 import { AdaptiveQuality } from './adaptive-quality';
 import { PerfOverlay, PerfProbe } from './diagnostics';
+import { DebugBridge, DebugCamera } from './debug-bridge';
 import { useWorldMapTexture } from './map-ground';
 import { createWorld, type World as PhysicsWorld } from './physics';
 import { getLayout, worldMeta, type WorldId } from './world-cities';
@@ -22,6 +23,7 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
   const [reducedQuality, setReducedQuality] = useState(false);
   const [performanceReduced, setPerformanceReduced] = useState(false);
   const [debug, setDebug] = useState(false);
+  const [camPose, setCamPose] = useState<number[] | null>(null);
   const lowPower = reducedQuality || performanceReduced;
 
   const layout = useMemo(() => getLayout(worldId), [worldId]);
@@ -37,7 +39,10 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
     const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     setReducedQuality(coarsePointer || reducedMotion);
-    setDebug(new URLSearchParams(window.location.search).has('debug'));
+    const params = new URLSearchParams(window.location.search);
+    setDebug(params.has('debug'));
+    const cam = (params.get('cam') ?? '').split(',').map(Number);
+    if (cam.length === 6 && cam.every((n) => Number.isFinite(n))) setCamPose(cam);
 
     try {
       const test = document.createElement('canvas');
@@ -81,14 +86,15 @@ export function WorldScene({ worldId = 'hub' }: { worldId?: WorldId }) {
           <color attach="background" args={[layout.theme.zenith ?? layout.theme.background]} />
           <PerfProbe />
           <AdaptiveQuality
-            onDecline={() => setPerformanceReduced(true)}
+            onDecline={() => { if (!debug) setPerformanceReduced(true); }}
             onIncline={() => setPerformanceReduced(false)}
           />
           <Suspense fallback={null}>
             <World world={layout} lowPower={lowPower} mapTexture={worldMap.texture} />
-            <ChaseCamera active />
+            {debug && camPose ? <DebugCamera pose={camPose} /> : <ChaseCamera active />}
             <Simulation world={world} onPortal={(href) => router.push(href)} />
           </Suspense>
+          {debug && <DebugBridge layout={layout} physics={world} />}
         </Canvas>
       )}
       <div className="world-grain" />

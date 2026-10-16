@@ -67,11 +67,19 @@ export function animateHour(theme: WorldTheme, elapsed: number): number {
 
 const SUN_RADIUS = 34;
 
+/**
+ * The world is a bright-day, light-only experience (see docs/world-art-direction.md):
+ * it must never fall to dusk or night, and there is no dark theme to switch to. A
+ * floor on `dayFactor` keeps the sun high and the sky luminous even at the edge of
+ * a city's drift band, and the moon/stars are forced off entirely.
+ */
+const MIN_DAY_FACTOR = 0.82;
+
 export function samplePalette(hour: number, theme: WorldTheme): DayPalette {
   const norm = ((hour % 24) + 24) % 24;
   // 6h dawn, 12h zenith, 18h dusk.
   const elevation = Math.sin(((norm - 6) / 12) * Math.PI);
-  const dayFactor = clamp(elevation, 0, 1);
+  const dayFactor = clamp(elevation, MIN_DAY_FACTOR, 1);
   const warm = clamp(Math.sin(((norm - 15.5) / 6) * Math.PI), 0, 1); // golden hour near ~18.5h
   const azimuth = ((norm - 6) / 12) * Math.PI;
 
@@ -85,8 +93,6 @@ export function samplePalette(hour: number, theme: WorldTheme): DayPalette {
   const horizon = lerpHex(darken(theme.ambient[0], 0.3), theme.sun.color, 0.45 * warm);
   const zenith = lerpHex(theme.zenith, lighten(theme.ambient[0], 0.18), 0.7 * dayFactor);
 
-  const moonOpacity = clamp(1.2 - dayFactor * 2, 0, 1);
-
   return {
     hour: norm,
     dayFactor,
@@ -97,19 +103,12 @@ export function samplePalette(hour: number, theme: WorldTheme): DayPalette {
     },
     moon: {
       position: [-sunPosition[0] * 0.8, Math.abs(sunPosition[1]) * 0.7 + 6, -sunPosition[2] * 0.8],
-      opacity: clamp(Math.max(dayFactor * 0.4, 0.55), 0, 1) * (1 - dayFactor),
+      opacity: 0,
     },
-    ambient: { intensity: theme.ambient[1] * (0.42 + 0.58 * dayFactor), color: theme.ambient[0] },
-    hemi: {
-      sky: lerpHex(theme.hemisphere[0], '#0a1216', 1 - dayFactor),
-      ground: theme.hemisphere[1],
-      intensity: theme.hemisphere[2] * (0.55 + 0.45 * dayFactor),
-    },
-    fog: lerpHex(theme.fog[0], lerpHex(darken(theme.ambient[0], 0.2), sunColor, 0.35 * warm), 0.5),
-    sky: {
-      zenith: lerpHex(theme.zenith, lighten(theme.ambient[0], 0.15), 0.75 * dayFactor),
-      horizon: lerpHex(darken(theme.ambient[0], 0.3), lighten(sunColor, 0.12), 0.55 * warm),
-    },
-    stars: clamp(1 - dayFactor * 1.35, 0, 0.9),
+    ambient: { intensity: theme.ambient[1] * (0.2 + 0.8 * dayFactor), color: theme.ambient[0] },
+    hemi: { sky: theme.hemisphere[0], ground: theme.hemisphere[1], intensity: theme.hemisphere[2] * (0.35 + 0.65 * dayFactor) },
+    fog: theme.fog[0],
+    sky: { zenith, horizon },
+    stars: 0,
   };
 }

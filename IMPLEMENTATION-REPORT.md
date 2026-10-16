@@ -217,3 +217,94 @@ A follow-up pass replaced the flat placeholder look with real open-source assets
 Limitations are recorded in `docs/world-validation.md` (no browser/GPU here: perceived
 scale/orientation and frame-rate are unverified and not claimed).
 
+## Light-mode world pass — daytime, a real car, and data-driven streets
+
+A further pass moved the entire experience to a single **light** design and rebuilt the
+world's street layer from data.
+
+- **Light-only site.** `app/globals.css` gains an additive override layer (appended after
+  the existing rules, so no component contract is broken) that redefines the `:root`
+  design tokens to a light palette — paper/white surfaces, dark `--mist` text, a deeper
+  `--lime-deep` accent for text on light, and `--cyan` — and restyles every dark surface,
+  border, HUD panel and illustration literal. The layout rules are untouched.
+- **Daytime world.** All four city themes in `components/world/world-layout.ts` and
+  `world-cities.ts` are set to clear daytime (background/fog/zenith bright, ambient and
+  hemisphere raised, sun warm and high). Every hub building `tint` and the work/about/contact
+  facade tints were swapped to light values, and the ground, roads, curbs, walls, landmark,
+  station pads and skirt in `city.tsx` were converted to light materials. The two fill lights
+  were softened and neutralised.
+- **Hand-modelled car.** `components/world/city.tsx` replaces the previous box car with a
+  fully parametric vehicle: extruded body and cabin silhouettes, tinted-glass cabin, four
+  `Wheel` assemblies (tyre/rim/hub/disc/spokes), mirrors, grille/splitter/diffuser and
+  emissive head/tail lights, plus a lime paint with a clearcoat. It keeps the previous
+  footprint (~1.16 × 2.04 m) and the wheels roll at the former radius, so handling is unchanged.
+- **Data-driven streets and districts.** `WorldLayout` now carries `roads` (centre-line
+  segments with a width and `arterial`/`street`/`lane` class), optional `rings` (roundabout
+  annuli) and optional `districts` (named quarters with a tint). New `Roads` and `Districts`
+  components render them; the hub's six-street grid and four quarters, and each district
+  city's arterial + roundabout, are now pure data. Project destinations were already derived
+  from `lib/projects.ts`.
+- **Physics untouched.** No collider, spawn, station or route coordinate changed, so the
+  34-test suite passes unchanged — the regression guard for driving.
+
+### Verification (light-mode pass)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Types | `tsc --noEmit` | exit 0 |
+| Tests | `pnpm test` | 34 / 34 pass |
+| Build | `next build` | exit 0, 33 routes |
+
+As before, there is no browser/GPU in this environment, so the *appearance* of the light
+world, the car's exact proportions and orientation, and the frame rate are reasoned from
+the code and verified by the build — not observed. Confirm on a real device with `?debug=1`.
+
+## World redesign pass — road network, five districts, brighter day, curated assets
+
+A production-grade redesign pass addressed the bottlenecks catalogued in
+`docs/world-redesign/baseline-audit.md` (B1–B8). Design rationale lives in
+`docs/world-redesign/world-layout.md`; asset provenance in
+`docs/world-redesign/asset-catalog.md`.
+
+- **Curated CC0 assets (`public/world/` now 80 files, 48.6 MB).** Added a clear
+  **daylight HDRI** (`kloofendal_43d_clear`, 1.45 MB), five new PBR material sets
+  (`brick_wall_001`, `blue_plaster_wall`, `concrete_tile_facade`, `brick_pavement`,
+  `cobblestone_pavement`) and two props (`planter_box_02`, `painted_wooden_bench`).
+  Tree models were measured (63–205 MB) and rejected in favour of procedural foliage.
+- **Driving environment is light-only end to end (B5/B4).** `assets.ts` selects the
+  daylight HDRI for every city and `time-of-day.ts` clamps `dayFactor` to ≥ 0.82 and
+  forces moon/stars off, so no city can render dusk or night. The dusk/night HDRIs
+  remain only as documented fallbacks.
+- **Road network designed before the buildings (B1).** `city.tsx` gains `RoadNetwork`:
+  segment surfaces, a rounded **junction pad at every crossing** (detected via
+  `segIntersection`), **kerbs + sidewalks** on both sides of every non-lane road, and
+  centre markings. Each layer sits on its own y, so the overlapping coplanar quads that
+  used to z-fight at intersections can no longer shimmer. Kerbs are instanced-free but
+  cheap; the hub's nine crossings all render cleanly.
+- **One ground system instead of five (B7).** `RoadNetwork` is now the canonical surface
+  owner; the asset layer contributes only the PBR pavement base, and the duplicated
+  asset-layer asphalt/ring planes were removed.
+- **Five districts (brief §Districts).** The hub declares Arrival Plaza, Work Quarter,
+  Innovation Yard, Reflection Gardens and Landmark Commons; the mapping to routes is in
+  `docs/world-redesign/world-layout.md`. Districts remain visual-only (no colliders).
+- **Architectural variety (B2-adjacent).** `BuildingSkins` now cycles a four-material
+  facade palette by building index instead of cladding every block in one texture.
+- **Garden furnishing.** A `GardenCluster` (painted benches + garden planters) dresses
+  the Reflection Gardens in the hub and the About city.
+- **Vehicle.** Kept the parametric hand-modelled car — no suitably-licensed CC0 car GLB
+  was found; sourcing options are recorded in `docs/world-redesign/asset-catalog.md`.
+- **Physics untouched.** No collider, spawn, station, building or route coordinate
+  changed, so the 34-test suite passes unchanged — still the regression guard for driving.
+
+### Verification (redesign pass)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Types | `tsc --noEmit` | exit 0 |
+| Tests | `pnpm test` | 34 / 34 pass |
+| Build | `pnpm build` | exit 0, 33 routes |
+
+No browser/GPU is available here, so the redesigned junctions, kerbs, district tints,
+facade variety and the raised daylight are reasoned from geometry and confirmed to
+compile/build — not visually observed. Confirm on a real device with `?debug=1`.
+

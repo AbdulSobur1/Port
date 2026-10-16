@@ -62,6 +62,11 @@ export function useWorldMapTexture(enabled: boolean): WorldMap {
         const maplibre = await import('maplibre-gl');
         if (cancelled) return;
 
+        // MapLibre derives its worker URL from `import.meta.url`, which points at a
+        // bundler chunk under Next/Turbopack, so the module worker 404s and the map
+        // never initialises. Point it at the copy we serve from `/public` instead.
+        maplibre.setWorkerUrl('/maplibre-gl-worker.mjs');
+
         container = document.createElement('div');
         container.setAttribute('aria-hidden', 'true');
         container.style.cssText = `position:fixed;left:-20000px;top:0;width:${MAP_CANVAS_SIZE}px;height:${MAP_CANVAS_SIZE}px;pointer-events:none;`;
@@ -87,10 +92,18 @@ export function useWorldMapTexture(enabled: boolean): WorldMap {
           if (cancelled || canvasTexture) return;
           setStatus('unavailable');
           teardown();
-        }, 8000);
+        }, 12000);
 
-        instance.once('idle', () => {
+        // Grab the texture as soon as real tiles are on the canvas. `load`/`idle` are
+        // unreliable on slow software renderers (and in headless browsers), where the
+        // map draws its tiles but the lifecycle events lag past the fallback timer — so
+        // we also settle the moment `areTilesLoaded()` is true during a frame.
+        const settle = () => {
           if (cancelled || canvasTexture || !map) return;
+          if (timer !== undefined) {
+            window.clearTimeout(timer);
+            timer = undefined;
+          }
           canvasTexture = new THREE.CanvasTexture(instance.getCanvas());
           canvasTexture.flipY = false; // canvas top = north (see the convention in geo.ts)
           canvasTexture.colorSpace = THREE.SRGBColorSpace;
@@ -98,13 +111,17 @@ export function useWorldMapTexture(enabled: boolean): WorldMap {
           canvasTexture.minFilter = THREE.LinearFilter;
           canvasTexture.generateMipmaps = false;
           canvasTexture.anisotropy = 4;
-          // Tiles can still stream in after the first idle; refresh on demand.
-          instance.on('render', () => {
-            if (canvasTexture) canvasTexture.needsUpdate = true;
-          });
           setTexture(canvasTexture);
           setStatus('ready');
+        };
+        // Tiles can still stream in after the first frame; refresh on demand, and settle
+        // as soon as the initial set is fully drawn.
+        instance.on('render', () => {
+          if (canvasTexture) canvasTexture.needsUpdate = true;
+          else if (map && instance.areTilesLoaded()) settle();
         });
+        instance.once('load', settle);
+        instance.once('idle', settle);
       } catch {
         if (!cancelled) setStatus('unavailable');
         teardown();

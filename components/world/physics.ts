@@ -38,7 +38,25 @@ export type Vehicle = {
 
 /* ---------------------------------------------------------------- tuning ---- */
 
-export const VEHICLE_RADIUS = 0.8; // collision footprint (approx. of the 1.18 x 1.95 body)
+/**
+ * Collision radius of each body sample. The car is ~1.9 m wide, so a single
+ * 0.8 m radius circle represents its width well; three of them, laid along the
+ * heading, also represent its ~4.3 m length (see `VEHICLE_SAMPLES`).
+ */
+export const VEHICLE_RADIUS = 0.8;
+
+/**
+ * Longitudinal sample offsets (metres, along the vehicle heading, +forward). The
+ * body is resolved as three overlapping circles at these offsets so the car's
+ * length — not just its centre — collides with geometry. This stops the long nose
+ * or tail from visually clipping a wall while the centre is still 0.8 m clear.
+ */
+export const VEHICLE_SAMPLES: readonly number[] = [-1.35, 0, 1.35];
+
+/** World-space centres of the vehicle's collision samples for a given pose. */
+export function footprintPoints(x: number, z: number, yaw: number): Point2[] {
+  return VEHICLE_SAMPLES.map((offset) => ({ x: x + Math.sin(yaw) * offset, z: z + Math.cos(yaw) * offset }));
+}
 
 const MAX_SPEED = 10; // m/s (~36 km/h) — tuned for the size of the map
 const MAX_REVERSE_SPEED = 3.5;
@@ -145,20 +163,37 @@ export function createWorld(layout: WorldLayout) {
   const colliders = buildColliders(layout);
   const bounds = layout.bounds;
 
-  /** Resolve any penetration against every collider + world bounds. Returns the deepest normal. */
+  /**
+   * Push the vehicle body out of every solid collider. The body is represented by
+   * `VEHICLE_SAMPLES` circles laid along the heading; each is resolved against all
+   * colliders and the resulting displacement is applied to the whole body, so the
+   * long nose/tail collide correctly instead of only the centre. Iterated a few
+   * times so a push from one sample that shoves another into a second collider is
+   * itself resolved. Returns the deepest contact normal (used for wall-sliding).
+   */
   function resolvePenetration(v: Vehicle): { hit: boolean; nx: number; nz: number } {
     let hit = false;
-    let best: Push | null = null;
-    for (let pass = 0; pass < 4; pass++) {
+    let bestNx = 0;
+    let bestNz = 0;
+    let bestDepth = -1;
+    for (let pass = 0; pass < 6; pass++) {
       let moved = false;
-      for (const c of colliders) {
-        const push = pushOut(v.x, v.z, c);
-        if (!push) continue;
-        v.x = push.x;
-        v.z = push.z;
-        moved = true;
-        hit = true;
-        if (!best || push.depth > best.depth) best = push;
+      for (const offset of VEHICLE_SAMPLES) {
+        const sx = v.x + Math.sin(v.yaw) * offset;
+        const sz = v.z + Math.cos(v.yaw) * offset;
+        for (const c of colliders) {
+          const push = pushOut(sx, sz, c);
+          if (!push) continue;
+          v.x += push.x - sx;
+          v.z += push.z - sz;
+          moved = true;
+          hit = true;
+          if (push.depth > bestDepth) {
+            bestDepth = push.depth;
+            bestNx = push.nx;
+            bestNz = push.nz;
+          }
+        }
       }
       const cx = clamp(v.x, -bounds, bounds);
       const cz = clamp(v.z, -bounds, bounds);
@@ -170,7 +205,7 @@ export function createWorld(layout: WorldLayout) {
       }
       if (!moved) break;
     }
-    return { hit, nx: best?.nx ?? 0, nz: best?.nz ?? 0 };
+    return { hit, nx: bestNx, nz: bestNz };
   }
 
   /**

@@ -6,6 +6,7 @@ import {
   planRoute,
   colliders,
   isPointDrivable,
+  footprintPoints,
   VEHICLE_RADIUS,
   type Vehicle,
   type Point2,
@@ -19,19 +20,33 @@ function makeVehicle(x: number, z: number, yaw: number, speed = 0): Vehicle {
   return { x, z, yaw, speed, steer: 0, honkAge: 99 };
 }
 
-function insideFootprint(v: { x: number; z: number }, b: BuildingSpec): boolean {
-  return Math.abs(v.x - b.x) <= b.w / 2 && Math.abs(v.z - b.z) <= b.d / 2;
+type Pose = { x: number; z: number; yaw: number };
+
+function pointInsideBuilding(p: Point2, b: BuildingSpec): boolean {
+  return Math.abs(p.x - b.x) <= b.w / 2 && Math.abs(p.z - b.z) <= b.d / 2;
 }
 
-function overlapsAny(v: { x: number; z: number }): boolean {
+/**
+ * A building is entered if ANY of the vehicle's collision samples falls inside it.
+ * Uses the production `footprintPoints` (three circles along the heading) so the
+ * tests exercise the real body shape instead of re-deriving a single circle.
+ */
+function insideFootprint(v: Pose, b: BuildingSpec): boolean {
+  return footprintPoints(v.x, v.z, v.yaw).some((p) => pointInsideBuilding(p, b));
+}
+
+/** True if any body sample overlaps any solid collider, using the real footprint. */
+function overlapsAny(v: Pose): boolean {
   const eps = 1e-3;
   for (const c of colliders) {
-    if (c.type === 'circle') {
-      if (Math.hypot(v.x - c.x, v.z - c.z) < c.r + VEHICLE_RADIUS - eps) return true;
-    } else {
-      const dx = (v.x - c.x) - clamp(v.x - c.x, -c.hx, c.hx);
-      const dz = (v.z - c.z) - clamp(v.z - c.z, -c.hz, c.hz);
-      if (Math.hypot(dx, dz) < VEHICLE_RADIUS - eps) return true;
+    for (const p of footprintPoints(v.x, v.z, v.yaw)) {
+      if (c.type === 'circle') {
+        if (Math.hypot(p.x - c.x, p.z - c.z) < c.r + VEHICLE_RADIUS - eps) return true;
+      } else {
+        const dx = (p.x - c.x) - clamp(p.x - c.x, -c.hx, c.hx);
+        const dz = (p.z - c.z) - clamp(p.z - c.z, -c.hz, c.hz);
+        if (Math.hypot(dx, dz) < VEHICLE_RADIUS - eps) return true;
+      }
     }
   }
   return false;
@@ -97,6 +112,16 @@ test('the central landmark is solid', () => {
   drive(v, () => ({ power: 1, brake: false, steerCmd: 0 }), 5);
   const distance = Math.hypot(v.x - landmark.x, v.z - landmark.z);
   assert.ok(distance >= landmark.radius + VEHICLE_RADIUS - 0.05, `entered landmark (d=${distance.toFixed(2)})`);
+});
+
+test('the collision body is length-aware, not a single centre circle', () => {
+  const b = buildings.find((spec) => spec.x === 21.4 && spec.z === 4.2)!;
+  const wall = b.x - b.w / 2;
+  // Centre is a full metre clear of the wall, but the nose sample reaches into it:
+  // a single-circle model would report the pose as legal.
+  const v = makeVehicle(wall - (VEHICLE_RADIUS + 1.0), b.z, Math.PI / 2);
+  assert.equal(isPointDrivable(v.x, v.z, VEHICLE_RADIUS), true, 'centre should be clear');
+  assert.equal(overlapsAny(v), true, 'the long nose should already be in contact');
 });
 
 test('steering cannot rotate the vehicle while it is stationary', () => {

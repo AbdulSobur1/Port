@@ -5,10 +5,11 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { vehicle as vehicleState } from './store';
-import type { BuildingSpec, Station, WorldLayout } from './world-layout';
+import type { BuildingSpec, Road, Ring, Station, WorldLayout } from './world-layout';
 import { Atmosphere as SkyRig, Glow } from './atmosphere';
 import { AssetLayer } from './asset-layer';
 import { WORLD_ASSETS_ENABLED } from './assets';
+import { VehicleMesh } from './vehicle';
 import { MAP_SPAN_METERS } from './geo';
 
 const LIME = '#d8f851';
@@ -56,17 +57,17 @@ function poseMatrix(
 
 /* Shared, immutable ground-marking geometry/materials — reused by every instanced batch. */
 const groundMarkGeo = new THREE.PlaneGeometry(0.075, 1);
-const groundMarkMat = new THREE.MeshBasicMaterial({ color: '#d0d5c5', transparent: true, opacity: 0.35 });
+const groundMarkMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6 });
 const seamGeo = new THREE.PlaneGeometry(0.018, 12);
-const seamMat = new THREE.MeshBasicMaterial({ color: '#45605a', transparent: true, opacity: 0.3 });
+const seamMat = new THREE.MeshBasicMaterial({ color: '#a49d8e', transparent: true, opacity: 0.35 });
 const ringMarkGeo = new THREE.BoxGeometry(0.075, 0.02, 1.05);
-const ringMarkMat = new THREE.MeshBasicMaterial({ color: '#d0d5c5', transparent: true, opacity: 0.3 });
+const ringMarkMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.4 });
 
 /** Street furniture, expressed as instanced parts so a whole street is a few draw calls. */
 const furniture = {
   lamp: [
-    { geo: new THREE.CylinderGeometry(0.055, 0.09, 3.2, 8), mat: new THREE.MeshStandardMaterial({ color: '#3d4d47', metalness: 0.72, roughness: 0.3 }), local: { p: [0, 1.6, 0] as const } },
-    { geo: new THREE.BoxGeometry(0.72, 0.07, 0.1), mat: new THREE.MeshStandardMaterial({ color: '#52645a', metalness: 0.6, roughness: 0.35 }), local: { p: [0.28, 3.08, 0] as const, r: [0, 0, -0.18] as const } },
+    { geo: new THREE.CylinderGeometry(0.055, 0.09, 3.2, 8), mat: new THREE.MeshStandardMaterial({ color: '#6d7871', metalness: 0.6, roughness: 0.35 }), local: { p: [0, 1.6, 0] as const } },
+    { geo: new THREE.BoxGeometry(0.72, 0.07, 0.1), mat: new THREE.MeshStandardMaterial({ color: '#7d8880', metalness: 0.5, roughness: 0.4 }), local: { p: [0.28, 3.08, 0] as const, r: [0, 0, -0.18] as const } },
     { geo: new THREE.BoxGeometry(0.3, 0.12, 0.22), mat: new THREE.MeshStandardMaterial({ color: '#e5f7be', emissive: '#d8f851', emissiveIntensity: 2.2 }), local: { p: [0.58, 3.0, 0] as const } },
   ],
   tree: [
@@ -79,7 +80,152 @@ const furniture = {
   ],
 } as const;
 
-function HubFloor({ showBase }: { showBase: boolean }) {
+/* --------------------------------------------------------- road network ---- *
+ * The road armature is designed before the buildings and rendered as one system:
+ * segment surfaces, rounded junctions at every crossing, kerbs + sidewalks along
+ * every street, centre markings and ring roundabouts. Each layer sits at its own
+ * y so coplanar quads can never z-fight at an intersection (the previous build
+ * laid eight flat quads at the exact same height, which flickered where they
+ * overlapped). */
+
+const ROAD_Y = -0.075;
+const JUNCTION_Y = -0.066;
+const RING_Y = -0.062;
+const KERB_COLOR = '#c4beb1';
+const SIDEWALK_COLOR = '#d8d3c7';
+
+/** 2D segment intersection (used to place junction pads where two roads cross). */
+function segIntersection(a: Road, b: Road): { x: number; z: number } | null {
+  const x1 = a.x1, z1 = a.z1, x2 = a.x2, z2 = a.z2;
+  const x3 = b.x1, z3 = b.z1, x4 = b.x2, z4 = b.z2;
+  const den = (x1 - x2) * (z3 - z4) - (z1 - z2) * (x3 - x4);
+  if (Math.abs(den) < 1e-6) return null;
+  const t = ((x1 - x3) * (z3 - z4) - (z1 - z3) * (x3 - x4)) / den;
+  const u = ((x1 - x3) * (z1 - z2) - (z1 - z3) * (x1 - x2)) / den;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return { x: x1 + t * (x2 - x1), z: z1 + t * (z2 - z1) };
+}
+
+type Junction = { x: number; z: number; size: number };
+
+/**
+ * Renders the data-driven road armature for a city (see `WorldLayout.roads`).
+ * Junctions are drawn as rounded pads slightly above the crossing quads (their
+ * own y layer) so intersections read cleanly and never z-fight.
+ */
+function RoadNetwork({ roads, rings = [] }: { roads: Road[]; rings?: Ring[] }) {
+  const junctions = useMemo<Junction[]>(() => {
+    const out: Junction[] = [];
+    for (let i = 0; i < roads.length; i++) {
+      for (let j = i + 1; j < roads.length; j++) {
+        const p = segIntersection(roads[i], roads[j]);
+        if (!p) continue;
+        if (out.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < 0.6)) continue;
+        out.push({ x: p.x, z: p.z, size: Math.max(roads[i].width, roads[j].width) + 0.7 });
+      }
+    }
+    return out;
+  }, [roads]);
+
+  return (
+    <group>
+      {rings.map((r, i) => (
+        <group key={`ring-${i}`}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[r.x, -0.062, r.z]} receiveShadow>
+            <ringGeometry args={[r.radius, r.radius + r.width, 128]} />
+            <meshStandardMaterial color="#d0cbbf" roughness={0.92} />
+          </mesh>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[r.x, -0.05, r.z]}>
+            <ringGeometry args={[r.radius, r.radius + 0.1, 128]} />
+            <meshBasicMaterial color={LIME} transparent opacity={0.3} />
+          </mesh>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[r.x, -0.048, r.z]}>
+            <ringGeometry args={[r.radius + r.width - 0.1, r.radius + r.width, 128]} />
+            <meshBasicMaterial color="#ffffff" transparent opacity={0.5} />
+          </mesh>
+        </group>
+      ))}
+
+      {roads.map((r, i) => {
+        const dx = r.x2 - r.x1;
+        const dz = r.z2 - r.z1;
+        const length = Math.hypot(dx, dz);
+        const angle = Math.atan2(dx, dz);
+        const cx = (r.x1 + r.x2) / 2;
+        const cz = (r.z1 + r.z2) / 2;
+        const arterial = r.kind === 'arterial';
+        const lane = r.kind === 'lane';
+        const kerbOffset = r.width / 2 + 0.12;
+        return (
+          <group key={`road-${i}`} position={[cx, 0, cz]} rotation={[0, angle, 0]}>
+            {/* Surface */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.075, 0]} receiveShadow>
+              <planeGeometry args={[r.width, length]} />
+              <meshStandardMaterial color={arterial ? '#cbc6b9' : '#d6d1c5'} roughness={0.92} />
+            </mesh>
+            {/* Centre line on arterials */}
+            {arterial && (
+              <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.064, 0]}>
+                <planeGeometry args={[0.09, length]} />
+                <meshBasicMaterial color="#ffffff" transparent opacity={0.5} />
+              </mesh>
+            )}
+            {/* Kerbs + sidewalks (skipped on back lanes, which are kerb-less) */}
+            {!lane && [-1, 1].map((side) => (
+              <group key={`kerb-${side}`}>
+                <mesh position={[side * kerbOffset, 0.03, 0]} receiveShadow>
+                  <boxGeometry args={[0.24, 0.18, length]} />
+                  <meshStandardMaterial color="#c4beb1" roughness={0.92} metalness={0.04} />
+                </mesh>
+                <mesh position={[side * (kerbOffset + 0.42), 0.02, 0]} receiveShadow>
+                  <boxGeometry args={[0.6, 0.14, length]} />
+                  <meshStandardMaterial color="#bdb7aa" roughness={0.94} />
+                </mesh>
+              </group>
+            ))}
+          </group>
+        );
+      })}
+
+      {junctions.map((j, i) => (
+        <group key={`junction-${i}`} position={[j.x, 0, j.z]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.062, 0]} receiveShadow>
+            <circleGeometry args={[j.size / 2 + 0.35, 40]} />
+            <meshStandardMaterial color="#cdc8bb" roughness={0.92} />
+          </mesh>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.055, 0]}>
+            <ringGeometry args={[j.size / 2 + 0.24, j.size / 2 + 0.32, 48]} />
+            <meshBasicMaterial color="#ffffff" transparent opacity={0.35} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/** Soft themed ground discs that make each quarter of a city read distinctly. */
+function Districts({ world }: { world: WorldLayout }) {
+  const districts = world.districts;
+  if (!districts || districts.length === 0) return null;
+  return (
+    <group>
+      {districts.map((d) => (
+        <group key={d.name}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[d.x, -0.04, d.z]}>
+            <circleGeometry args={[d.radius, 64]} />
+            <meshBasicMaterial color={d.color} transparent opacity={0.07} depthWrite={false} />
+          </mesh>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[d.x, -0.038, d.z]}>
+            <ringGeometry args={[d.radius - 0.08, d.radius, 96]} />
+            <meshBasicMaterial color={d.color} transparent opacity={0.35} depthWrite={false} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function HubFloor({ world, showBase }: { world: WorldLayout; showBase: boolean }) {
   const roadMarks = useMemo(() => {
     const marks: { x: number; z: number; rotation: number; length: number }[] = [];
     for (let z = -22; z <= 22; z += 3.2) {
@@ -124,40 +270,17 @@ function HubFloor({ showBase }: { showBase: boolean }) {
       {showBase && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]} receiveShadow>
           <planeGeometry args={[64, 64]} />
-          <meshStandardMaterial color="#101a19" roughness={0.98} metalness={0.02} />
+          <meshStandardMaterial color="#e8e3d6" roughness={0.98} metalness={0.02} />
         </mesh>
       )}
       {/* The main streets frame the plaza instead of covering it with a debug grid. */}
-      {[0, -9.1, 9.1].map((x) => (
-        <group key={`road-x-${x}`}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[x, -0.075, 0]} receiveShadow>
-            <planeGeometry args={[x === 0 ? 5.5 : 3.2, 48]} />
-            <meshStandardMaterial color={x === 0 ? '#182322' : '#151f1e'} roughness={0.9} />
-          </mesh>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[x + (x === 0 ? 2.85 : 1.7), -0.055, 0]}>
-            <planeGeometry args={[0.09, 48]} />
-            <meshBasicMaterial color="#6c8378" transparent opacity={0.32} />
-          </mesh>
-        </group>
-      ))}
-      {[0, -9.1, 9.1].map((z) => (
-        <group key={`road-z-${z}`}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.07, z]} receiveShadow>
-            <planeGeometry args={[48, z === 0 ? 5.5 : 3.2]} />
-            <meshStandardMaterial color={z === 0 ? '#182322' : '#151f1e'} roughness={0.9} />
-          </mesh>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, z + (z === 0 ? 2.85 : 1.7)]}>
-            <planeGeometry args={[48, 0.09]} />
-            <meshBasicMaterial color="#6c8378" transparent opacity={0.32} />
-          </mesh>
-        </group>
-      ))}
+      <RoadNetwork roads={world.roads} rings={world.rings} />
       <Instances geometry={groundMarkGeo} material={groundMarkMat} transforms={markTransforms} />
       {/* Inlaid plaza rings guide the eye toward the central landmark. */}
       {[5.2, 6.1, 13.8, 14.1, 17.2].map((r, i) => (
         <mesh key={r} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.035 + i * 0.001, 0]}>
           <ringGeometry args={[r, r + (i === 2 ? 0.12 : 0.035), 128]} />
-          <meshBasicMaterial color={i === 2 ? LIME : '#52716a'} transparent opacity={i === 2 ? 0.24 : 0.2} />
+          <meshBasicMaterial color={i === 2 ? LIME : '#b6ae9e'} transparent opacity={i === 2 ? 0.3 : 0.28} />
         </mesh>
       ))}
       {/* Subtle plaza tile seams (single instanced mesh) */}
@@ -183,35 +306,11 @@ function DistrictFloor({ world, showBase }: { world: WorldLayout; showBase: bool
       {showBase && (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.12, 0]} receiveShadow>
           <planeGeometry args={[64, 64]} />
-          <meshStandardMaterial color="#101a19" roughness={0.98} metalness={0.02} />
+          <meshStandardMaterial color="#e8e3d6" roughness={0.98} metalness={0.02} />
         </mesh>
       )}
-      {/* North–south arterial from the spawn gate toward the centre. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.07, 0]} receiveShadow>
-        <planeGeometry args={[6, 64]} />
-        <meshStandardMaterial color="#182322" roughness={0.9} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[2.9, -0.05, 0]}>
-        <planeGeometry args={[0.09, 64]} />
-        <meshBasicMaterial color="#6c8378" transparent opacity={0.32} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-2.9, -0.05, 0]}>
-        <planeGeometry args={[0.09, 64]} />
-        <meshBasicMaterial color="#6c8378" transparent opacity={0.32} />
-      </mesh>
-      {/* Roundabout ring around the landmark integrates the arterial with the streets. */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.062, 0]} receiveShadow>
-        <ringGeometry args={[radius, radius + 5.6, 128]} />
-        <meshStandardMaterial color="#151f1e" roughness={0.9} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
-        <ringGeometry args={[radius, radius + 0.1, 128]} />
-        <meshBasicMaterial color={LIME} transparent opacity={0.2} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.048, 0]}>
-        <ringGeometry args={[radius + 5.5, radius + 5.6, 128]} />
-        <meshBasicMaterial color="#6c8378" transparent opacity={0.32} />
-      </mesh>
+      {/* The road armature (grid + junctions + kerbs) is data-driven per city. */}
+      <RoadNetwork roads={world.roads} rings={world.rings} />
       <Instances geometry={ringMarkGeo} material={ringMarkMat} transforms={ringMarkTransforms} />
     </group>
   );
@@ -248,36 +347,22 @@ function Crossings({ distance, roadWidth }: { distance: number; roadWidth: numbe
   if (!geometry) return null;
   return (
     <mesh geometry={geometry} position={[0, -0.04, 0]}>
-      <meshBasicMaterial color="#d0d5c5" transparent opacity={0.34} />
+      <meshBasicMaterial color="#ffffff" transparent opacity={0.8} />
     </mesh>
   );
 }
 
 function GroundDetails({ world }: { world: WorldLayout }) {
   if (world.id === 'hub') {
-    const roads = [0, -9.1, 9.1];
     return (
       <group>
-        {roads.map((x) => {
-          const half = (x === 0 ? 5.5 : 3.2) / 2;
-          return (
-            <group key={`curb-${x}`}>
-              {[half + 0.13, -(half + 0.13)].map((off) => (
-                <mesh key={off} position={[x + off, 0.09, 0]} receiveShadow>
-                  <boxGeometry args={[0.22, 0.18, 48]} />
-                  <meshStandardMaterial color="#2b3835" roughness={0.9} metalness={0.06} />
-                </mesh>
-              ))}
-            </group>
-          );
-        })}
         <Crossings distance={7} roadWidth={5.5} />
         {/* Crosswalk at the arrival plaza */}
         <group position={[0, 0, 14]}>
           {Array.from({ length: 7 }, (_, i) => i - 3).map((n) => (
             <mesh key={n} position={[n * 0.7, 0.015, 0]} rotation={[-Math.PI / 2, 0, 0]}>
               <planeGeometry args={[0.42, 2.6]} />
-              <meshBasicMaterial color="#cfd6c8" transparent opacity={0.5} />
+              <meshBasicMaterial color="#ffffff" transparent opacity={0.8} />
             </mesh>
           ))}
         </group>
@@ -287,12 +372,6 @@ function GroundDetails({ world }: { world: WorldLayout }) {
   const radius = world.landmark ? world.landmark.radius + 2.2 : 4;
   return (
     <group>
-      {[3.13, -3.13].map((off) => (
-        <mesh key={off} position={[off, 0.09, 0]} receiveShadow>
-          <boxGeometry args={[0.22, 0.18, 64]} />
-          <meshStandardMaterial color="#2b3835" roughness={0.9} metalness={0.06} />
-        </mesh>
-      ))}
       <Crossings distance={radius + 6.7} roadWidth={6} />
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radius, radius + 0.14, 128]} />
@@ -300,7 +379,7 @@ function GroundDetails({ world }: { world: WorldLayout }) {
       </mesh>
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radius + 5.5, radius + 5.64, 128]} />
-        <meshBasicMaterial color="#6c8378" transparent opacity={0.3} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.5} />
       </mesh>
     </group>
   );
@@ -341,17 +420,17 @@ function Building({ spec, index }: { spec: BuildingSpec; index: number }) {
     <group position={[x, 0, z]}>
       <mesh position={[0, 0.18, 0]} receiveShadow>
         <boxGeometry args={[w + 0.55, 0.36, d + 0.55]} />
-        <meshStandardMaterial color="#384542" roughness={0.88} />
+        <meshStandardMaterial color="#c6c0b3" roughness={0.88} />
       </mesh>
       <mesh position={[0, h / 2 + 0.35, 0]} castShadow receiveShadow>
         <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color={tint} roughness={0.72} metalness={0.22} />
+        <meshStandardMaterial color={tint} roughness={0.86} metalness={0.06} />
       </mesh>
       {/* Recessed-looking window bays, merged into three meshes per building to keep the
           draw-call count low (there can be ~60 windows per facade). */}
       {windowGeoms.panes && (
         <mesh geometry={windowGeoms.panes}>
-          <meshStandardMaterial color="#101c1c" emissive="#213b37" emissiveIntensity={0.16} roughness={0.3} metalness={0.35} />
+          <meshStandardMaterial color="#2f4a47" emissive="#123330" emissiveIntensity={0.14} roughness={0.28} metalness={0.4} />
         </mesh>
       )}
       {windowGeoms.accents && (
@@ -361,7 +440,7 @@ function Building({ spec, index }: { spec: BuildingSpec; index: number }) {
       )}
       {windowGeoms.sills && (
         <mesh geometry={windowGeoms.sills}>
-          <meshStandardMaterial color="#43534e" metalness={0.55} roughness={0.45} />
+          <meshStandardMaterial color="#b3ada0" metalness={0.2} roughness={0.6} />
         </mesh>
       )}
       {/* Vertical architectural spine */}
@@ -373,7 +452,7 @@ function Building({ spec, index }: { spec: BuildingSpec; index: number }) {
         <group position={[0, h + 0.42, 0]}>
           <mesh position={[0, 0.16, 0]}>
             <boxGeometry args={[w * 0.72, 0.32, d * 0.68]} />
-            <meshStandardMaterial color="#172321" metalness={0.45} roughness={0.6} />
+            <meshStandardMaterial color="#bdb7aa" metalness={0.15} roughness={0.7} />
           </mesh>
           <mesh position={[0, 0.35, 0]}>
             <boxGeometry args={[w * 0.44, 0.08, d * 0.4]} />
@@ -392,7 +471,7 @@ function Building({ spec, index }: { spec: BuildingSpec; index: number }) {
       {style === 'loft' && (
         <mesh position={[0, h + 0.48, 0]}>
           <boxGeometry args={[w * 0.64, 0.24, d * 0.64]} />
-          <meshStandardMaterial color="#101a19" metalness={0.55} roughness={0.4} />
+          <meshStandardMaterial color="#4d5a54" metalness={0.3} roughness={0.5} />
         </mesh>
       )}
       {style === 'slab' && (
@@ -403,7 +482,7 @@ function Building({ spec, index }: { spec: BuildingSpec; index: number }) {
       )}
       <mesh position={[0, 0.58, d / 2 + 0.04]}>
         <boxGeometry args={[w * 0.72, 0.34, 0.08]} />
-        <meshStandardMaterial color="#111b1a" metalness={0.5} roughness={0.3} />
+        <meshStandardMaterial color="#3a4a44" metalness={0.3} roughness={0.45} />
       </mesh>
       <mesh position={[0, 0.59, d / 2 + 0.09]}>
         <planeGeometry args={[w * 0.6, 0.15]} />
@@ -439,7 +518,7 @@ function PerimeterWall({ world }: { world: WorldLayout }) {
         <group key={`wall-${i}`} position={[w.x, 0, w.z]}>
           <mesh position={[0, 0.3, 0]} castShadow receiveShadow>
             <boxGeometry args={[w.hx * 2, 0.6, w.hz * 2]} />
-            <meshStandardMaterial color="#2b3a37" roughness={0.9} metalness={0.08} />
+            <meshStandardMaterial color="#d5cfc2" roughness={0.92} metalness={0.03} />
           </mesh>
           <mesh position={[0, 0.62, 0]}>
             <boxGeometry args={[w.hx * 2, 0.06, w.hz * 2]} />
@@ -467,11 +546,11 @@ function CentralLandmark({ radius }: { radius: number }) {
     <group position={[0, 0, 0]} scale={scale}>
       <mesh position={[0, 0.2, 0]} receiveShadow>
         <cylinderGeometry args={[3.25, 3.6, 0.4, 64]} />
-        <meshStandardMaterial color="#172321" metalness={0.5} roughness={0.42} />
+        <meshStandardMaterial color="#cfc9bc" metalness={0.25} roughness={0.5} />
       </mesh>
       <mesh position={[0, 0.44, 0]}>
         <cylinderGeometry args={[2.9, 3.05, 0.08, 64]} />
-        <meshStandardMaterial color="#35463e" metalness={0.4} roughness={0.4} />
+        <meshStandardMaterial color="#bdb7aa" metalness={0.2} roughness={0.5} />
       </mesh>
       <mesh position={[0, 0.5, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[2.55, 2.72, 96]} />
@@ -520,7 +599,7 @@ function StationPads({ stations }: { stations: Station[] }) {
         <group key={station.zone} position={[station.x, 0.035, station.z]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]}>
             <circleGeometry args={[2.25, 64]} />
-            <meshStandardMaterial color="#14211e" roughness={0.8} metalness={0.2} />
+            <meshStandardMaterial color="#eae4d8" roughness={0.85} metalness={0.05} />
           </mesh>
           <mesh ref={(node) => { rings.current[i] = node; }} rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[1.85, 1.94, 64]} />
@@ -547,7 +626,7 @@ function StationPedestal({ x, z, color }: { x: number; z: number; color: string 
     <group position={[x, 0, z]}>
       <mesh position={[0, 0.65, 0]} castShadow>
         <cylinderGeometry args={[0.55, 0.72, 1.3, 8]} />
-        <meshStandardMaterial color="#1a2926" metalness={0.72} roughness={0.3} />
+        <meshStandardMaterial color="#cbc5b8" metalness={0.3} roughness={0.45} />
       </mesh>
       <mesh position={[0, 1.34, 0]}>
         <cylinderGeometry args={[0.58, 0.58, 0.08, 8]} />
@@ -587,65 +666,6 @@ function PortalGate({ x, z, color }: { x: number; z: number; color: string }) {
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.6} metalness={0.3} roughness={0.2} />
       </mesh>
       <Glow x={0} y={1.7} z={0} color={color} size={5} opacity={0.5} />
-    </group>
-  );
-}
-
-/* ---------- Player vehicle ---------- */
-const vehGeo = {
-  body: new THREE.BoxGeometry(1.18, 0.34, 1.95),
-  cabin: new THREE.BoxGeometry(0.8, 0.31, 0.92),
-  wheel: new THREE.CylinderGeometry(0.17, 0.17, 0.14, 16),
-};
-const paint = new THREE.MeshStandardMaterial({ color: LIME, roughness: 0.28, metalness: 0.38 });
-const cabinMat = new THREE.MeshPhysicalMaterial({ color: '#12201f', metalness: 0.45, roughness: 0.19, clearcoat: 0.9, clearcoatRoughness: 0.18 });
-const wheelMat = new THREE.MeshStandardMaterial({ color: '#090e0d', roughness: 0.85 });
-const glassMat = new THREE.MeshPhysicalMaterial({ color: '#6b9c92', metalness: 0.4, roughness: 0.12, transparent: true, opacity: 0.72, clearcoat: 1 });
-
-function VehicleMesh() {
-  const group = useRef<THREE.Group>(null!);
-  const wheels = useRef<(THREE.Mesh | null)[]>([]);
-  useFrame((_, dt) => {
-    const v = vehicleState;
-    if (!group.current) return;
-    group.current.position.set(v.x, 0.2, v.z);
-    group.current.rotation.y = v.yaw;
-    const roll = v.speed * Math.min(dt, 0.05) * (1 / 0.17);
-    for (const wheel of wheels.current) if (wheel) wheel.rotation.x -= roll;
-  });
-  const wheelPositions: [number, number, number][] = [
-    [-0.63, -0.12, -0.58], [0.63, -0.12, -0.58], [-0.63, -0.12, 0.63], [0.63, -0.12, 0.63],
-  ];
-  return (
-    <group ref={group}>
-      <mesh position={[0, 0.18, 0]} castShadow receiveShadow geometry={vehGeo.body} material={paint} />
-      <mesh position={[0, 0.45, -0.2]} castShadow geometry={vehGeo.cabin} material={cabinMat} />
-      <mesh position={[0, 0.48, 0.24]} geometry={new THREE.BoxGeometry(0.66, 0.2, 0.12)} material={glassMat} />
-      <mesh position={[0, 0.45, -0.64]} geometry={new THREE.BoxGeometry(0.66, 0.17, 0.1)} material={glassMat} />
-      <mesh position={[0, 0.15, -1.01]}>
-        <boxGeometry args={[0.78, 0.08, 0.035]} />
-        <meshBasicMaterial color="#f2f0d9" />
-      </mesh>
-      <mesh position={[0, 0.15, 1.01]}>
-        <boxGeometry args={[0.72, 0.07, 0.035]} />
-        <meshBasicMaterial color="#ff7863" />
-      </mesh>
-      {wheelPositions.map((p, i) => (
-        <group key={i} position={p}>
-          <mesh ref={(node) => { wheels.current[i] = node; }} rotation={[0, 0, Math.PI / 2]} geometry={vehGeo.wheel} material={wheelMat} />
-          <mesh rotation={[0, 0, Math.PI / 2]}>
-            <cylinderGeometry args={[0.085, 0.085, 0.148, 12]} />
-            <meshStandardMaterial color="#65716a" metalness={0.8} roughness={0.25} />
-          </mesh>
-        </group>
-      ))}
-      <mesh position={[0, 0.24, -0.72]}>
-        <boxGeometry args={[0.84, 0.055, 0.055]} />
-        <meshStandardMaterial color="#27342d" metalness={0.6} roughness={0.25} />
-      </mesh>
-      <Glow x={-0.4} y={0.3} z={-1.18} color="#eef7d0" size={1.1} opacity={0.5} />
-      <Glow x={0.4} y={0.3} z={-1.18} color="#eef7d0" size={1.1} opacity={0.5} />
-      <Glow x={0} y={0.32} z={1.02} color="#ff5a4d" size={1.4} opacity={0.4} />
     </group>
   );
 }
@@ -694,10 +714,11 @@ export function World({ world, lowPower = false, mapTexture }: { world: WorldLay
   return (
     <group>
       <SkyRig theme={world.theme} lowPower={lowPower} />
-      <pointLight position={[-12, 8, -8]} intensity={7} color="#477c80" distance={26} />
-      <pointLight position={[12, 7, 12]} intensity={5} color="#7766b0" distance={22} />
+      <pointLight position={[-12, 8, -8]} intensity={4} color="#e6f0ea" distance={26} />
+      <pointLight position={[12, 7, 12]} intensity={3} color="#fff2df" distance={22} />
       <MapPlane texture={mapTexture} />
-      {world.id === 'hub' ? <HubFloor showBase={!hasMap} /> : <DistrictFloor world={world} showBase={!hasMap} />}
+      <Districts world={world} />
+      {world.id === 'hub' ? <HubFloor world={world} showBase={!hasMap} /> : <DistrictFloor world={world} showBase={!hasMap} />}
       <GroundDetails world={world} />
       <CitySkirt world={world} show={!hasMap} />
       {world.buildings.map((spec, index) => <Building key={`${spec.x}-${spec.z}`} spec={spec} index={index} />)}

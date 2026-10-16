@@ -24,7 +24,7 @@ function makeWorkCity(): WorldLayout {
     const z = zStart + row * step;
     buildings.push({
       x: side * 10, z, w: 4, d: 2.6, h: 3.4 + (i % 5) * 0.9,
-      tint: '#202e30', accent: project.color, style: STYLES[i % STYLES.length],
+      tint: '#dcd6c9', accent: project.color, style: STYLES[i % STYLES.length],
     });
     stations.push({
       zone: `project:${project.slug}`, label: project.title, sub: project.category,
@@ -38,15 +38,15 @@ function makeWorkCity(): WorldLayout {
   return {
     id: 'work', name: 'Work District', bounds: 24, spawn: { x: 0, z: 18, yaw: Math.PI },
     theme: {
-      background: '#070f12',
-      fog: ['#070f12', 30, 60],
-      ambient: ['#c4d6dd', 0.5],
-      hemisphere: ['#7fb0c4', '#0e1518', 0.82],
-      sun: { position: [16, 22, -10], intensity: 1.5, color: '#e8f2ff' },
-      time: 22,
-      timeBand: [21, 1.5],
-      zenith: '#04080d',
-      weather: 'rain',
+      background: '#dde7ec',
+      fog: ['#dde7ec', 34, 66],
+      ambient: ['#ffffff', 0.55],
+      hemisphere: ['#d6e6f2', '#d3cdc0', 0.9],
+      sun: { position: [16, 22, -10], intensity: 1.35, color: '#fdf6ea' },
+      time: 13,
+      timeBand: [12, 14.5],
+      zenith: '#77b6e0',
+      weather: 'clear',
     },
     landmark: { x: 0, z: 0, radius: 2.6 },
     buildings,
@@ -59,16 +59,25 @@ function makeWorkCity(): WorldLayout {
       { x: -22, z: 0, hx: 2, hz: 22 },
     ],
     stations,
+    roads: [
+      { x1: 0, z1: -32, x2: 0, z2: 32, width: 6, kind: 'arterial' },
+      { x1: -16, z1: 0, x2: 16, z2: 0, width: 4, kind: 'street' },
+    ],
+    rings: [{ x: 0, z: 0, radius: 2.6, width: 5.6 }],
+    districts: [
+      { name: 'North Plots', x: 0, z: 12, radius: 6, color: '#6de0dd' },
+      { name: 'South Gate', x: 0, z: -14, radius: 6, color: '#d8f851' },
+    ],
   };
 }
 
 /** About city: a quiet plaza around a central monument. */
 function makeAboutCity(): WorldLayout {
   const buildings: BuildingSpec[] = [
-    { x: -9, z: -8, w: 4, d: 3.4, h: 5.2, tint: '#263b39', accent: '#6de0dd', style: 'terrace' },
-    { x: 9, z: -8, w: 4, d: 3.4, h: 6.4, tint: '#202e30', accent: '#a28cff', style: 'spire' },
-    { x: -9, z: 8, w: 3.6, d: 3.6, h: 4.2, tint: '#293a37', accent: '#d8f851', style: 'loft' },
-    { x: 9, z: 8, w: 3.6, d: 3.6, h: 5.6, tint: '#263634', accent: '#ffb467', style: 'slab' },
+    { x: -9, z: -8, w: 4, d: 3.4, h: 5.2, tint: '#d9d3c6', accent: '#6de0dd', style: 'terrace' },
+    { x: 9, z: -8, w: 4, d: 3.4, h: 6.4, tint: '#e2dccf', accent: '#a28cff', style: 'spire' },
+    { x: -9, z: 8, w: 3.6, d: 3.6, h: 4.2, tint: '#d5cfc2', accent: '#d8f851', style: 'loft' },
+    { x: 9, z: 8, w: 3.6, d: 3.6, h: 5.6, tint: '#dad4c7', accent: '#ffb467', style: 'slab' },
   ];
   const stations: Station[] = [
     { zone: 'about', label: 'About Soburr', sub: 'Who and why', x: -6, z: 4, yaw: Math.PI / 2, color: '#d8f851', radius: 2.2, kind: 'place' },
@@ -78,14 +87,14 @@ function makeAboutCity(): WorldLayout {
   return {
     id: 'about', name: 'Reflection Gardens', bounds: 18, spawn: { x: 0, z: 9.5, yaw: Math.PI },
     theme: {
-      background: '#08110f',
-      fog: ['#08110f', 22, 46],
-      ambient: ['#cfe0d6', 0.5],
-      hemisphere: ['#93c3ac', '#0f1714', 0.9],
-      sun: { position: [10, 18, 12], intensity: 1.7, color: '#e8f4dd' },
-      time: 11,
-      timeBand: [9.5, 12.5],
-      zenith: '#0b1613',
+      background: '#dfeae4',
+      fog: ['#dfeae4', 30, 62],
+      ambient: ['#ffffff', 0.6],
+      hemisphere: ['#d8ecdf', '#d9d3c4', 0.95],
+      sun: { position: [12, 24, 8], intensity: 1.5, color: '#fff6e2' },
+      time: 12,
+      timeBand: [10.5, 13.5],
+      zenith: '#8cc6e8',
       weather: 'clear',
     },
     landmark: { x: 0, z: -1, radius: 2.8 },
@@ -97,16 +106,25 @@ function makeAboutCity(): WorldLayout {
       { x: 14, z: 0, hx: 2, hz: 14 }, { x: -14, z: 0, hx: 2, hz: 14 },
     ],
     stations,
+    roads: [
+      { x1: 0, z1: -28, x2: 0, z2: 28, width: 6, kind: 'arterial' },
+      { x1: -22, z1: 0, x2: 22, z2: 0, width: 4.5, kind: 'street' },
+    ],
+    rings: [{ x: 0, z: -1, radius: 2.8, width: 5.6 }],
+    districts: [
+      { name: 'About Court', x: -7, z: -6, radius: 5.5, color: '#6de0dd' },
+      { name: 'Systems Lawn', x: 7, z: -6, radius: 5.5, color: '#d8f851' },
+    ],
   };
 }
 
 /** Contact city: a compact terminal courtyard. */
 function makeContactCity(): WorldLayout {
   const buildings: BuildingSpec[] = [
-    { x: -8, z: -6, w: 4, d: 3.6, h: 6.8, tint: '#202e30', accent: '#6de0dd', style: 'spire' },
-    { x: 8, z: -6, w: 4, d: 3.6, h: 5.4, tint: '#263b39', accent: '#a28cff', style: 'terrace' },
-    { x: -8, z: 6, w: 3.8, d: 3.2, h: 4.6, tint: '#293a37', accent: '#ffb467', style: 'loft' },
-    { x: 8, z: 6, w: 3.8, d: 3.2, h: 6, tint: '#263634', accent: '#d8f851', style: 'slab' },
+    { x: -8, z: -6, w: 4, d: 3.6, h: 6.8, tint: '#e2dccf', accent: '#6de0dd', style: 'spire' },
+    { x: 8, z: -6, w: 4, d: 3.6, h: 5.4, tint: '#d9d3c6', accent: '#a28cff', style: 'terrace' },
+    { x: -8, z: 6, w: 3.8, d: 3.2, h: 4.6, tint: '#d5cfc2', accent: '#ffb467', style: 'loft' },
+    { x: 8, z: 6, w: 3.8, d: 3.2, h: 6, tint: '#dad4c7', accent: '#d8f851', style: 'slab' },
   ];
   const stations: Station[] = [
     { zone: 'contact', label: 'Signal Room', sub: 'Get in touch', x: 0, z: -5, yaw: 0, color: '#d8f851', radius: 2.4, kind: 'place' },
@@ -115,15 +133,15 @@ function makeContactCity(): WorldLayout {
   return {
     id: 'contact', name: 'Signal Station', bounds: 16, spawn: { x: 0, z: 7.5, yaw: Math.PI },
     theme: {
-      background: '#0a0f16',
-      fog: ['#0a0f16', 20, 42],
-      ambient: ['#cdd8e6', 0.5],
-      hemisphere: ['#8f9fd0', '#12141d', 0.9],
-      sun: { position: [-12, 18, 10], intensity: 1.5, color: '#e6ecff' },
-      time: 2,
-      timeBand: [1.5, 3.5],
-      zenith: '#070b16',
-      weather: 'snow',
+      background: '#e0e4ee',
+      fog: ['#e0e4ee', 30, 60],
+      ambient: ['#ffffff', 0.58],
+      hemisphere: ['#dae0f2', '#d6d0c6', 0.92],
+      sun: { position: [10, 23, 12], intensity: 1.4, color: '#fdf3ea' },
+      time: 11,
+      timeBand: [9.5, 12.5],
+      zenith: '#84bce0',
+      weather: 'clear',
     },
     landmark: { x: 0, z: 0, radius: 2.4 },
     buildings,
@@ -134,6 +152,11 @@ function makeContactCity(): WorldLayout {
       { x: 12, z: 0, hx: 2, hz: 12 }, { x: -12, z: 0, hx: 2, hz: 12 },
     ],
     stations,
+    roads: [
+      { x1: 0, z1: -26, x2: 0, z2: 26, width: 6, kind: 'arterial' },
+      { x1: -20, z1: 0, x2: 20, z2: 0, width: 4.5, kind: 'street' },
+    ],
+    rings: [{ x: 0, z: 0, radius: 2.4, width: 5 }],
   };
 }
 

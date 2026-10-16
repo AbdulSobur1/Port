@@ -73,59 +73,18 @@ function EnvironmentLight({ hour, lowPower }: { hour: number; lowPower: boolean 
 
 /* ------------------------------------------------------------------ floor --- */
 
-const ROAD_TILE = 4.5;
-
-function AsphaltRoad({ w, h, position }: { w: number; h: number; position: [number, number, number] }) {
-  const asphalt = useMaterial('asphalt', 1);
-  const geometry = useTiledPlane(w, h, ROAD_TILE);
-  if (!asphalt) return null;
-  return <mesh rotation={[-Math.PI / 2, 0, 0]} position={position} geometry={geometry} material={asphalt} />;
-}
-
-/** PBR road + pavement planes laid just above the procedural floor. */
-function TexturedGround({ world }: { world: WorldLayout }) {
+/**
+ * The PBR pavement base laid just under the road armature. Road surfaces,
+ * junctions and kerbs are owned by the procedural `RoadNetwork` in city.tsx, so
+ * this layer adds only the ground texture (no duplicate road planes).
+ */
+function TexturedGround() {
   const pavement = useMaterial('pavement', 1);
   const pavementGeometry = useTiledPlane(64, 64, 3.2);
   if (!pavement) return null;
-
-  const base = (
+  return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.082, 0]} geometry={pavementGeometry} material={pavement} />
   );
-
-  if (world.id === 'hub') {
-    const lanes = [
-      { at: 0, w: 5.5 },
-      { at: -9.1, w: 3.2 },
-      { at: 9.1, w: 3.2 },
-    ];
-    return (
-      <group>
-        {base}
-        {lanes.map((lane) => <AsphaltRoad key={`rx-${lane.at}`} w={lane.w} h={48} position={[lane.at, -0.071, 0]} />)}
-        {lanes.map((lane) => <AsphaltRoad key={`rz-${lane.at}`} w={48} h={lane.w} position={[0, -0.071, lane.at]} />)}
-      </group>
-    );
-  }
-
-  const radius = world.landmark ? world.landmark.radius + 2.2 : 4;
-  return (
-    <group>
-      {base}
-      <AsphaltRoad w={6} h={64} position={[0, -0.071, 0]} />
-      <RingRoad radius={radius} />
-    </group>
-  );
-}
-
-/** A shared-tile asphalt ring (roundabout) for the district cities. */
-function RingRoad({ radius }: { radius: number }) {
-  const asphalt = useMaterial('asphalt', 1);
-  const geometry = useMemo(
-    () => tileUV(new THREE.RingGeometry(radius, radius + 5.6, 128), (radius + 5.6) / 2.25, (radius + 5.6) / 2.25),
-    [radius]
-  );
-  if (!asphalt) return null;
-  return <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.066, 0]} geometry={geometry} material={asphalt} />;
 }
 
 /* ---------------------------------------------------------------- facades --- */
@@ -137,11 +96,23 @@ function BuildingSkin({ x, z, w, d, h, material }: { x: number; z: number; w: nu
 
 function BuildingSkins({ world }: { world: WorldLayout }) {
   const facade = useMaterial('facade', 1);
+  const brick = useMaterial('brick', 1);
+  const plaster = useMaterial('plaster', 1);
+  const tileFacade = useMaterial('tileFacade', 1);
+  const palette = [facade, tileFacade, plaster, brick];
   if (!facade) return null;
   return (
     <group>
-      {world.buildings.map((b) => (
-        <BuildingSkin key={`skin-${b.x}-${b.z}`} x={b.x} z={b.z} w={b.w} d={b.d} h={b.h} material={facade} />
+      {world.buildings.map((b, i) => (
+        <BuildingSkin
+          key={`skin-${b.x}-${b.z}`}
+          x={b.x}
+          z={b.z}
+          w={b.w}
+          d={b.d}
+          h={b.h}
+          material={palette[i % palette.length] ?? facade}
+        />
       ))}
     </group>
   );
@@ -195,6 +166,47 @@ function HubProps() {
   );
 }
 
+/**
+ * Garden furniture cluster (painted benches + planters) for the green districts.
+ * Like every prop in this layer it is purely decorative and adds no collider.
+ */
+function GardenCluster({ x, z }: { x: number; z: number }) {
+  const cobble = useMaterial('cobble', 3);
+  const path = useMaterial('brickPath', 6);
+  const benches: ReadonlyArray<readonly [number, number, number]> = [
+    [-2.2, 0, Math.PI / 2],
+    [2.2, 0, -Math.PI / 2],
+  ];
+  const planters: ReadonlyArray<readonly [number, number]> = [
+    [0, -2.6],
+    [0, 2.6],
+    [-2.8, 2.8],
+    [2.8, -2.8],
+  ];
+  return (
+    <group position={[x, 0, z]}>
+      {cobble && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.072, 0]} receiveShadow>
+          <circleGeometry args={[4.6, 48]} />
+          <primitive object={cobble} attach="material" />
+        </mesh>
+      )}
+      {path && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.07, 0]}>
+          <planeGeometry args={[1.1, 12]} />
+          <primitive object={path} attach="material" />
+        </mesh>
+      )}
+      {benches.map(([bx, bz, yaw]) => (
+        <Prop key={`gbench-${bx}-${bz}`} id="gardenBench" x={bx} z={bz} yaw={yaw} />
+      ))}
+      {planters.map(([px, pz]) => (
+        <Prop key={`gplanter-${px}-${pz}`} id="planterGarden" x={px} z={pz} />
+      ))}
+    </group>
+  );
+}
+
 /* ------------------------------------------------------------------ layer --- */
 
 export function AssetLayer({ world, lowPower = false }: { world: WorldLayout; lowPower?: boolean }) {
@@ -202,10 +214,12 @@ export function AssetLayer({ world, lowPower = false }: { world: WorldLayout; lo
   return (
     <group>
       <EnvironmentLight hour={world.theme.time} lowPower={lowPower} />
-      <TexturedGround world={world} />
+      <TexturedGround />
       <BuildingSkins world={world} />
       <StreetLamps world={world} />
       {world.id === 'hub' && <HubProps />}
+      {world.id === 'hub' && <GardenCluster x={-15} z={11} />}
+      {world.id === 'about' && <GardenCluster x={0} z={-11} />}
     </group>
   );
 }

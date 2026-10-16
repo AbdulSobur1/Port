@@ -54,6 +54,26 @@ export type WorldTheme = {
   weather?: WorldWeather;
 };
 
+/**
+ * An axis-aligned stretch of road, described by its centre line. Roads carry no
+ * collision (the car drives freely over them) — they are the visual armature the
+ * geometry and destinations are placed against.
+ */
+export type Road = {
+  x1: number;
+  z1: number;
+  x2: number;
+  z2: number;
+  width: number;
+  kind?: 'arterial' | 'street' | 'lane';
+};
+
+/** A concentric ring road around a point (e.g. a landmark roundabout). */
+export type Ring = { x: number; z: number; radius: number; width: number };
+
+/** A named quarter of a city. Purely visual/thematic — it never affects collision. */
+export type District = { name: string; x: number; z: number; radius: number; color: string };
+
 /** A fully self-contained city: its geometry, collision data and destinations. */
 export type WorldLayout = {
   id: WorldId;
@@ -67,6 +87,12 @@ export type WorldLayout = {
   treePositions: ReadonlyArray<readonly [number, number, number]>;
   perimeterWalls: ReadonlyArray<{ x: number; z: number; hx: number; hz: number }>;
   stations: Station[];
+  /** Surface road network drawn beneath the city (see city.tsx `Roads`). */
+  roads: Road[];
+  /** Ring roads / roundabouts. */
+  rings?: Ring[];
+  /** Themed quarters for subtle ground tinting and architectural grouping. */
+  districts?: District[];
 };
 
 // Ring of destinations around the central landmark.
@@ -100,29 +126,29 @@ export type BuildingSpec = {
 
 // Perimeter buildings. These ARE solid obstacles (see physics.ts).
 export const buildings: BuildingSpec[] = [
-  { x: -21.5, z: -17, w: 3.8, d: 4.4, h: 8.5, tint: '#263b39', accent: '#6de0dd', style: 'terrace' },
-  { x: -16.4, z: -21.3, w: 4.1, d: 3.6, h: 5.8, tint: '#253331', accent: '#d8f851', style: 'loft' },
-  { x: -10.2, z: -21.2, w: 3.6, d: 4.1, h: 10.2, tint: '#202e30', accent: '#a28cff', style: 'spire' },
-  { x: -3.9, z: -21.7, w: 4.6, d: 3.8, h: 6.4, tint: '#293b38', accent: '#ffb467', style: 'slab' },
-  { x: 3.2, z: -21.4, w: 4.4, d: 4.2, h: 8.2, tint: '#253b3a', accent: '#6de0dd', style: 'terrace' },
-  { x: 9.7, z: -21.5, w: 3.6, d: 3.8, h: 5.4, tint: '#2a3634', accent: '#ff7863', style: 'loft' },
-  { x: 16.1, z: -21.3, w: 4.4, d: 4.2, h: 9.4, tint: '#202d2f', accent: '#a28cff', style: 'spire' },
-  { x: 21.4, z: -16.3, w: 3.8, d: 4.3, h: 6.8, tint: '#293b38', accent: '#d8f851', style: 'terrace' },
-  { x: 21.3, z: -9.6, w: 4.2, d: 3.5, h: 11.5, tint: '#202f30', accent: '#6de0dd', style: 'spire' },
-  { x: 21.4, z: -2.9, w: 3.8, d: 4.2, h: 7.1, tint: '#283a37', accent: '#ffb467', style: 'slab' },
-  { x: 21.4, z: 4.2, w: 4.1, d: 3.6, h: 5.7, tint: '#263634', accent: '#a28cff', style: 'loft' },
-  { x: 21.2, z: 10.5, w: 3.6, d: 4.3, h: 8.9, tint: '#20302f', accent: '#d8f851', style: 'terrace' },
-  { x: 16.5, z: 21.2, w: 4.2, d: 3.8, h: 7.2, tint: '#293a37', accent: '#6de0dd', style: 'loft' },
-  { x: 10.1, z: 21.5, w: 3.8, d: 4.1, h: 10.5, tint: '#202f30', accent: '#a28cff', style: 'spire' },
-  { x: 3.6, z: 21.4, w: 4.5, d: 3.7, h: 6.1, tint: '#293a37', accent: '#ff7863', style: 'slab' },
-  { x: -3.2, z: 21.5, w: 3.7, d: 4.1, h: 8.6, tint: '#263835', accent: '#d8f851', style: 'terrace' },
-  { x: -9.7, z: 21.2, w: 4.4, d: 3.8, h: 5.6, tint: '#263634', accent: '#ffb467', style: 'loft' },
-  { x: -16.1, z: 21.3, w: 3.9, d: 4.3, h: 9.8, tint: '#202f30', accent: '#6de0dd', style: 'spire' },
-  { x: -21.3, z: 15.2, w: 4.1, d: 3.7, h: 6.2, tint: '#293a37', accent: '#a28cff', style: 'slab' },
-  { x: -21.5, z: 8.4, w: 3.7, d: 4.2, h: 10.4, tint: '#20302f', accent: '#d8f851', style: 'spire' },
-  { x: -21.4, z: 1.8, w: 4.2, d: 3.6, h: 7.6, tint: '#263835', accent: '#ff7863', style: 'terrace' },
-  { x: -21.3, z: -5.1, w: 3.8, d: 4.1, h: 5.9, tint: '#293a37', accent: '#6de0dd', style: 'loft' },
-  { x: -21.4, z: -11.5, w: 4.2, d: 3.8, h: 9.2, tint: '#20302f', accent: '#ffb467', style: 'spire' },
+  { x: -21.5, z: -17, w: 3.8, d: 4.4, h: 8.5, tint: '#d9d3c6', accent: '#6de0dd', style: 'terrace' },
+  { x: -16.4, z: -21.3, w: 4.1, d: 3.6, h: 5.8, tint: '#cfc9bc', accent: '#d8f851', style: 'loft' },
+  { x: -10.2, z: -21.2, w: 3.6, d: 4.1, h: 10.2, tint: '#e2dccf', accent: '#a28cff', style: 'spire' },
+  { x: -3.9, z: -21.7, w: 4.6, d: 3.8, h: 6.4, tint: '#d3cdc0', accent: '#ffb467', style: 'slab' },
+  { x: 3.2, z: -21.4, w: 4.4, d: 4.2, h: 8.2, tint: '#dcd6c9', accent: '#6de0dd', style: 'terrace' },
+  { x: 9.7, z: -21.5, w: 3.6, d: 3.8, h: 5.4, tint: '#cdc7ba', accent: '#ff7863', style: 'loft' },
+  { x: 16.1, z: -21.3, w: 4.4, d: 4.2, h: 9.4, tint: '#e6e0d3', accent: '#a28cff', style: 'spire' },
+  { x: 21.4, z: -16.3, w: 3.8, d: 4.3, h: 6.8, tint: '#d3cdc0', accent: '#d8f851', style: 'terrace' },
+  { x: 21.3, z: -9.6, w: 4.2, d: 3.5, h: 11.5, tint: '#d8d2c5', accent: '#6de0dd', style: 'spire' },
+  { x: 21.4, z: -2.9, w: 3.8, d: 4.2, h: 7.1, tint: '#cbc5b8', accent: '#ffb467', style: 'slab' },
+  { x: 21.4, z: 4.2, w: 4.1, d: 3.6, h: 5.7, tint: '#dad4c7', accent: '#a28cff', style: 'loft' },
+  { x: 21.2, z: 10.5, w: 3.6, d: 4.3, h: 8.9, tint: '#d0cabd', accent: '#d8f851', style: 'terrace' },
+  { x: 16.5, z: 21.2, w: 4.2, d: 3.8, h: 7.2, tint: '#d5cfc2', accent: '#6de0dd', style: 'loft' },
+  { x: 10.1, z: 21.5, w: 3.8, d: 4.1, h: 10.5, tint: '#d8d2c5', accent: '#a28cff', style: 'spire' },
+  { x: 3.6, z: 21.4, w: 4.5, d: 3.7, h: 6.1, tint: '#d5cfc2', accent: '#ff7863', style: 'slab' },
+  { x: -3.2, z: 21.5, w: 3.7, d: 4.1, h: 8.6, tint: '#d8d2c5', accent: '#d8f851', style: 'terrace' },
+  { x: -9.7, z: 21.2, w: 4.4, d: 3.8, h: 5.6, tint: '#dad4c7', accent: '#ffb467', style: 'loft' },
+  { x: -16.1, z: 21.3, w: 3.9, d: 4.3, h: 9.8, tint: '#d8d2c5', accent: '#6de0dd', style: 'spire' },
+  { x: -21.3, z: 15.2, w: 4.1, d: 3.7, h: 6.2, tint: '#d5cfc2', accent: '#a28cff', style: 'slab' },
+  { x: -21.5, z: 8.4, w: 3.7, d: 4.2, h: 10.4, tint: '#d0cabd', accent: '#d8f851', style: 'spire' },
+  { x: -21.4, z: 1.8, w: 4.2, d: 3.6, h: 7.6, tint: '#d8d2c5', accent: '#ff7863', style: 'terrace' },
+  { x: -21.3, z: -5.1, w: 3.8, d: 4.1, h: 5.9, tint: '#d5cfc2', accent: '#6de0dd', style: 'loft' },
+  { x: -21.4, z: -11.5, w: 4.2, d: 3.8, h: 9.2, tint: '#d0cabd', accent: '#ffb467', style: 'spire' },
 ];
 
 // Solid street furniture. Format: [x, z] for lamps, [x, z, scale] for planter trees.
@@ -167,14 +193,14 @@ export const hubLayout: WorldLayout = {
   bounds: WORLD_BOUNDS,
   spawn,
   theme: {
-    background: '#09100f',
-    fog: ['#09100f', 26, 54],
-    ambient: ['#c8d9c8', 0.48],
-    hemisphere: ['#8bb9ac', '#101715', 0.85],
-    sun: { position: [12, 19, 8], intensity: 1.65, color: '#e6f1dc' },
-    time: 18,
-    timeBand: [17.3, 21.7],
-    zenith: '#05090b',
+    background: '#dbe7ee',
+    fog: ['#e2eaee', 32, 62],
+    ambient: ['#ffffff', 0.55],
+    hemisphere: ['#cfe4f2', '#d9d3c4', 0.9],
+    sun: { position: [14, 22, 10], intensity: 1.4, color: '#fff4e6' },
+    time: 12,
+    timeBand: [11, 14],
+    zenith: '#6fb7e6',
     weather: 'clear',
   },
   landmark,
@@ -183,4 +209,24 @@ export const hubLayout: WorldLayout = {
   treePositions,
   perimeterWalls,
   stations,
+  // The hub is a cardinal grid: two arterials crossing at the plaza, with a
+  // secondary street each side, all bounded by the perimeter wall.
+  roads: [
+    { x1: 0, z1: -24, x2: 0, z2: 24, width: 5.5, kind: 'arterial' },
+    { x1: -9.1, z1: -24, x2: -9.1, z2: 24, width: 3.2 },
+    { x1: 9.1, z1: -24, x2: 9.1, z2: 24, width: 3.2 },
+    { x1: -24, z1: 0, x2: 24, z2: 0, width: 5.5, kind: 'arterial' },
+    { x1: -24, z1: -9.1, x2: 24, z2: -9.1, width: 3.2 },
+    { x1: -24, z1: 9.1, x2: 24, z2: 9.1, width: 3.2 },
+  ],
+  // The five districts of the hub (brief §Districts). Arrival frames the spawn,
+  // Work and Innovation hold the project + systems anchors, Reflection Gardens
+  // is the quieter west quarter and the central Landmark plaza binds them.
+  districts: [
+    { name: 'Arrival Plaza', x: 0, z: 15, radius: 6.6, color: '#d8f851' },
+    { name: 'Work Quarter', x: 0, z: -15, radius: 6.6, color: '#a28cff' },
+    { name: 'Innovation Yard', x: 14, z: 12, radius: 6.2, color: '#6de0dd' },
+    { name: 'Reflection Gardens', x: -15, z: 11, radius: 6.4, color: '#8fd36a' },
+    { name: 'Landmark Commons', x: 0, z: 0, radius: 7.4, color: '#ffd479' },
+  ],
 };

@@ -33,6 +33,12 @@ The landing page is one canvas with four drivable cities, linked by portal gates
 - `/about` — **Gardens**
 - `/contact` — **Signal**
 
+## Art direction
+
+The whole site — editorial pages and the 3D world alike — is a **light, daytime** design: paper and white surfaces, dark text, and a single lime/cyan accent pair. There is no dark theme. Every city is set to daylight (hub noon, work early afternoon, about and contact mid-morning), so the sky, fog, ambient and sun are tuned bright and the buildings, roads and landmark use light facades. See `app/globals.css` for the light token layer and `components/world/world-layout.ts` / `world-cities.ts` for the per-city themes.
+
+The city's road network is **data-driven**: each `WorldLayout` declares `roads` (centre lines with a width and class), optional `rings` (roundabouts) and optional `districts` (themed quarters). `Roads` and `Districts` in `components/world/city.tsx` render them, so a street is a data edit, not a code edit. The visitor's car is a hand-modelled parametric mesh (sculpted body, glass cabin, wheels, head/tail lights) built in the same file — no external model is required.
+
 ## Controls
 
 - `W` / `Arrow Up`: accelerate
@@ -69,6 +75,10 @@ All geometry shares one documented coordinate system, defined in `components/wor
 
 If MapLibre, the network, or WebGL is unavailable, the map degrades gracefully to the fully procedural ground — the city is never left without a floor.
 
+### Districts and the road network
+
+The road network is designed as data before any building is placed: each city declares `roads` (centre-lines), `rings` (roundabouts) and `districts` in `components/world/world-layout.ts`. A single `RoadNetwork` renderer draws surfaces, rounded junctions at every crossing, kerbs and sidewalks, on separate depth layers so intersections never z-fight. The hub carries five districts — Arrival Plaza, Work Quarter, Innovation Yard, Reflection Gardens and Landmark Commons. The world is a **bright-day, light-only** experience: every city loads the same clear-noon HDRI and can never render dusk or night. See `docs/world-redesign/world-layout.md`.
+
 ### Map configuration
 
 Copy `.env.example` to `.env.local` to override the defaults:
@@ -84,7 +94,7 @@ Map data © OpenStreetMap contributors.
 
 ## Open-source assets
 
-The world is dressed with real, PBR-textured 3D assets, all **CC0 1.0** — roads, paving, facades and an HDRI environment (Poly Haven), plus glTF street props: lamp posts, benches, planters, hydrants and barriers. The procedural base city always renders underneath, and each asset layer fades in as it loads, so the world never blanks while downloading. Set `NEXT_PUBLIC_WORLD_ASSETS=off` for the fully procedural fallback (no downloads).
+The world is dressed with real, PBR-textured 3D assets, all **CC0 1.0** — roads, paving, brick/plaster/tile facades and a clear-noon HDRI environment (Poly Haven), plus glTF street props: lamp posts, benches, planters, hydrants and barriers. The procedural base city always renders underneath, and each asset layer fades in as it loads, so the world never blanks while downloading. Set `NEXT_PUBLIC_WORLD_ASSETS=off` for the fully procedural fallback (no downloads).
 
 - `public/world/models/` — glTF props (auto-normalised to a target height at load)
 - `public/world/materials/` — PBR surface sets (diffuse / normal / packed ARM)

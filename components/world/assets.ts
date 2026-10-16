@@ -24,7 +24,9 @@ const hasDom = typeof window !== 'undefined' && typeof document !== 'undefined';
 
 /* --------------------------------------------------------------- models ---- */
 
-export type ModelId = 'streetLamp' | 'bench' | 'barrier' | 'hydrant' | 'planter';
+export type ModelId =
+  | 'streetLamp' | 'bench' | 'barrier' | 'hydrant' | 'planter'
+  | 'planterGarden' | 'gardenBench';
 
 type ModelDef = { url: string; /** target world height in metres */ height: number; label: string };
 
@@ -34,11 +36,15 @@ export const MODELS: Record<ModelId, ModelDef> = {
   barrier: { url: `${ROOT}/models/concrete_road_barrier/concrete_road_barrier_1k.gltf`, height: 0.82, label: 'Road barrier' },
   hydrant: { url: `${ROOT}/models/fire_hydrant/fire_hydrant_1k.gltf`, height: 0.94, label: 'Fire hydrant' },
   planter: { url: `${ROOT}/models/planter_box_01/planter_box_01_1k.gltf`, height: 0.58, label: 'Planter box' },
+  planterGarden: { url: `${ROOT}/models/planter_box_02/planter_box_02_1k.gltf`, height: 0.52, label: 'Garden planter' },
+  gardenBench: { url: `${ROOT}/models/painted_wooden_bench/painted_wooden_bench_1k.gltf`, height: 0.88, label: 'Painted bench' },
 };
 
 /* ------------------------------------------------------------ materials ---- */
 
-export type MaterialId = 'asphalt' | 'pavement' | 'facade' | 'concrete' | 'metal';
+export type MaterialId =
+  | 'asphalt' | 'pavement' | 'facade' | 'concrete' | 'metal'
+  | 'brick' | 'plaster' | 'tileFacade' | 'brickPath' | 'cobble';
 
 type MaterialDef = { diff: string; nor: string; arm: string };
 
@@ -54,18 +60,29 @@ export const MATERIALS: Record<MaterialId, MaterialDef> = {
   facade: materialSet('rectangular_facade_tiles'),
   concrete: materialSet('concrete'),
   metal: materialSet('metal_plate'),
+  brick: materialSet('brick_wall_001'),
+  plaster: materialSet('blue_plaster_wall'),
+  tileFacade: materialSet('concrete_tile_facade'),
+  brickPath: materialSet('brick_pavement'),
+  cobble: materialSet('cobblestone_pavement'),
 };
 
 /* ---------------------------------------------------------- environment ---- */
 
-export const ENVIRONMENT = {
-  day: `${ROOT}/environment/qwantani_dusk_1_1k.hdr`,
+export const ENVIRONMENTS = {
+  daylight: `${ROOT}/environment/kloofendal_43d_clear_1k.hdr`,
+  dusk: `${ROOT}/environment/qwantani_dusk_1_1k.hdr`,
   night: `${ROOT}/environment/satara_night_1k.hdr`,
 } as const;
 
-/** Pick the IBL that suits a city's hour of day. */
-export function environmentForHour(hour: number): string {
-  return hour >= 19 || hour < 6 ? ENVIRONMENT.night : ENVIRONMENT.day;
+/**
+ * The world is bright-day, light-only by design (see docs/world-art-direction.md):
+ * every city loads the same clear noon sky regardless of its nominal hour. The
+ * dusk/night HDRIs stay in the manifest only as documented fallbacks and are
+ * never selected by the running site.
+ */
+export function environmentForHour(_hour: number): string {
+  return ENVIRONMENTS.daylight;
 }
 
 /* ----------------------------------------------------------------- loaders - */
@@ -210,14 +227,24 @@ export function useModel(id: ModelId): THREE.Object3D | null {
   return useLoaded(entry);
 }
 
-/** Preload every model + material once the world mounts (fire-and-forget). */
+/**
+ * Preload the models and the material palette the renderer actually uses, at the
+ * exact tiling each is drawn with (so the cache warms the right entries). Catalog
+ * materials that no component references (asphalt/concrete/metal) are intentionally
+ * not preloaded.
+ */
+const PRELOAD_MATERIALS: ReadonlyArray<readonly [MaterialId, number]> = [
+  ['pavement', 1], ['facade', 1], ['brick', 1], ['plaster', 1], ['tileFacade', 1],
+  ['cobble', 3], ['brickPath', 6],
+];
+
 export function preloadWorldAssets() {
   if (!hasDom || !WORLD_ASSETS_ENABLED) return;
   (Object.keys(MODELS) as ModelId[]).forEach((id) => modelEntry(id));
-  (Object.keys(MATERIALS) as MaterialId[]).forEach((id) => {
+  for (const [id, repeat] of PRELOAD_MATERIALS) {
     const def = MATERIALS[id];
-    textureEntry(def.diff, true, 1, 1);
-    textureEntry(def.nor, false, 1, 1);
-    textureEntry(def.arm, false, 1, 1);
-  });
+    textureEntry(def.diff, true, repeat, repeat);
+    textureEntry(def.nor, false, repeat, repeat);
+    textureEntry(def.arm, false, repeat, repeat);
+  }
 }
