@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import { placeProjectBuildings, clearProjectPlots } from '../lib/world/project-buildings.ts';
+const w=JSON.parse(fs.readFileSync('./public/data/lagos-world.json'));
+const chunks=[];
+for(let r=0;r<w.meta.chunks;r++)for(let c=0;c<w.meta.chunks;c++)chunks.push(...JSON.parse(fs.readFileSync(`./public/data/lagos-buildings-${r}${c}.json`)).b);
+const fps=chunks.map(b=>b.p);
+const projects=placeProjectBuildings(w.stations, fps, {roadHalfWidth:Math.max(6,...w.stations.map(s=>(s.roadWidth??12)/2)), playable:w.meta.playable.world});
+const cleared=clearProjectPlots(fps, projects);
+console.log('cleared',cleared.removed,'of',fps.length);
+for(const p of projects) console.log(p.label.padEnd(13),p.style.padEnd(9),'side',p.side,'build',p.width.toFixed(1)+'x'+p.depth.toFixed(1)+'x'+p.height.toFixed(1),'front',p.frontOffset.toFixed(0),'at',p.x.toFixed(0)+','+p.z.toFixed(0),'parked',p.parked.length);
