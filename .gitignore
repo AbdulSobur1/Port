@@ -1,0 +1,24 @@
+# dependencies
+node_modules/
+
+# next.js build output
+.next/
+out/
+
+# typescript
+*.tsbuildinfo
+tests-dist/
+
+# raw geographic datasets + downloaded tools (reproducible via scripts/)
+data/
+tools/
+
+# env files
+.env
+.env.local
+
+# archives produced by packaging
+*.zip
+
+# nested clone of this project's remote (its own repo)
+Port/
