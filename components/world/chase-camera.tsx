@@ -1,47 +1,59 @@
 'use client';
 
-import * as THREE from 'three';
-import { useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { vehicle as vehicleState } from './store';
+import * as THREE from 'three';
+import { runtime } from './store';
 
-/** Speed-aware chase camera with smooth follow, look-ahead, and gentle recovery after sharp turns. */
-export function ChaseCamera({ active }: { active: boolean }) {
-  const { camera } = useThree();
-  const desired = useMemo(() => new THREE.Vector3(), []);
-  const look = useMemo(() => new THREE.Vector3(), []);
-  const smoothedSpeed = useRef(0);
+/**
+ * Chase camera: trails the car at a speed-dependent distance, looks through
+ * the corner ahead rather than at the bumper, and widens the lens slightly at
+ * speed. Damping is frame-rate independent (exponential smoothing), and with
+ * reduced motion enabled the camera snaps instead of gliding.
+ */
+export function ChaseCamera({ reducedMotion }: { reducedMotion: boolean }) {
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const look = useRef(new THREE.Vector3());
+  const initialised = useRef(false);
 
   useFrame((_, dtRaw) => {
+    const car = runtime.current?.car;
+    if (!car) return;
     const dt = Math.min(0.05, dtRaw);
-    const v = vehicleState;
-    smoothedSpeed.current = THREE.MathUtils.damp(smoothedSpeed.current, Math.abs(v.speed), 3.2, dt);
+    const speed = Math.abs(car.speed);
+    const fast = Math.min(1, speed / 22);
 
-    if (!active) return;
+    const back = 7.4 + fast * 2.8;
+    const height = 2.65 + fast * 1.0;
+    // A little shoulder offset: a dead-centre chase camera flattens the car
+    // into a rear silhouette and hides its wheels. The offset is proportional
+    // to speed so it opens up in corners without feeling like a turntable.
+    const lateral = 0.95 + fast * 0.35;
+    const targetX = car.x - Math.sin(car.yaw) * back + Math.cos(car.yaw) * lateral;
+    const targetZ = car.z - Math.cos(car.yaw) * back - Math.sin(car.yaw) * lateral;
 
-    const speedRatio = THREE.MathUtils.clamp(smoothedSpeed.current / 13, 0, 1);
-    const followDistance = THREE.MathUtils.lerp(7.2, 9.8, speedRatio);
-    const followHeight = THREE.MathUtils.lerp(4.5, 6.1, speedRatio);
-    const behind = v.yaw + Math.PI;
-    desired.set(
-      v.x + Math.sin(behind) * followDistance,
-      followHeight,
-      v.z + Math.cos(behind) * followDistance
+    if (!initialised.current) {
+      camera.position.set(targetX, height, targetZ);
+      initialised.current = true;
+    } else {
+      const k = reducedMotion ? 1 : 1 - Math.exp(-dt * 5.5);
+      camera.position.x += (targetX - camera.position.x) * k;
+      camera.position.y += (height - camera.position.y) * k;
+      camera.position.z += (targetZ - camera.position.z) * k;
+    }
+
+    look.current.set(
+      car.x + Math.sin(car.yaw) * (5.5 + fast * 5) + Math.cos(car.yaw) * 0.4,
+      1.3,
+      car.z + Math.cos(car.yaw) * (5.5 + fast * 5) - Math.sin(car.yaw) * 0.4
     );
+    camera.lookAt(look.current);
 
-    // Faster catch-up at speed prevents the vehicle from leaving the frame during turns.
-    const followAlpha = 1 - Math.exp(-THREE.MathUtils.lerp(3.5, 2.1, speedRatio) * dt);
-    camera.position.lerp(desired, followAlpha);
-
-    // Look slightly ahead of the vehicle along its heading. Deriving this from yaw (a
-    // smooth value) instead of the raw per-frame position delta avoids jitter.
-    const ahead = 1.1 + speedRatio * 2.1;
-    look.set(
-      v.x + Math.sin(v.yaw) * ahead,
-      0.95 + speedRatio * 0.25,
-      v.z + Math.cos(v.yaw) * ahead
-    );
-    camera.lookAt(look);
+    const fov = 54 + fast * 7;
+    if (Math.abs(camera.fov - fov) > 0.05) {
+      camera.fov += (fov - camera.fov) * (reducedMotion ? 1 : Math.min(1, dt * 3));
+      camera.updateProjectionMatrix();
+    }
   });
 
   return null;

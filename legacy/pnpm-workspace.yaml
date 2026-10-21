@@ -1,4 +1,0 @@
-allowBuilds:
-  protobufjs: set this to true or false
-minimumReleaseAgeExclude:
-  - '@types/node@24.19.2'

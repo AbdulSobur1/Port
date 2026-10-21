@@ -1,116 +1,174 @@
 'use client';
 
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { vehicle as vehicleState, input, setUi, getUi, type Station, type ZoneId } from './store';
-import { updateAudio } from './audio';
-import type { Point2, Vehicle, World } from './physics';
+import type { CollisionGrid } from '@/lib/world/collision';
+import type { RouteGraph } from '@/lib/geo/graph';
+import { snapToGraph } from '@/lib/geo/graph';
+import type { StationData } from '@/lib/world/types';
+import { advanceCar, type DriveCommand } from '@/lib/world/vehicle';
+import { physicsById } from '@/lib/world/vehicles';
+import { routeLength } from '@/lib/world/autopilot';
+import {
+  boundaryAhead,
+  clearanceBehind,
+  pedestrianAlongRoute,
+  routeClearance,
+  stepDriveFsm,
+} from '@/lib/world/drive-fsm';
+import {
+  auto,
+  getUi,
+  input,
+  resetAuto,
+  runtime,
+  setTelemetry,
+  setUi,
+  toast,
+  touchInput,
+  useUi,
+} from './store';
+import { cancelNavigation, navigateTo } from './navigation';
 
-type RouteState = { requestKey: string; points: Point2[]; index: number };
-
-/** Runs the simulation outside React's render cycle and publishes only discrete UI changes. */
-export function Simulation({ world, onPortal }: { world: World; onPortal?: (href: string) => void }) {
-  const lastZone = useRef<ZoneId | null>(null);
-  const route = useRef<RouteState | null>(null);
-
-  const nearestStationFor = (v: { x: number; z: number }): Station | null => {
-    let best: Station | null = null;
-    let bestDistance = Infinity;
-    for (const station of world.stations) {
-      const distance = Math.hypot(v.x - station.x, v.z - station.z);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = station;
-      }
-    }
-    return best;
-  };
-
-  const step = (dt: number) => {
-    const v = vehicleState as unknown as Vehicle;
-    const ui = getUi();
-    let request = ui.autopilotRequest;
-
-    // Manual steering or throttle always takes priority over guided navigation.
-    const manualOverride = input.forward > 0 || input.reverse > 0 || input.left || input.right || input.brake ||
-      vehicleState.touchPower !== 0 || vehicleState.touchSteer !== 0;
-    if (request && manualOverride) {
-      route.current = null;
-      setUi({ autopilotRequest: null, autopilotLabel: null, mode: 'drive' });
-      request = null;
-    }
-
-    let autopilotActive = false;
-    if (!request) {
-      route.current = null;
-    } else {
-      const activeRequest = request;
-      const station = world.stations.find((s) => s.zone === activeRequest.zone);
-      if (!station) {
-        route.current = null;
-      } else {
-        const requestKey = `${activeRequest.zone}:${station.x}:${station.z}`;
-        if (route.current?.requestKey !== requestKey) {
-          const points = world.planRoute({ x: v.x, z: v.z }, { x: station.x, z: station.z });
-          if (!points || points.length === 0) {
-            // No collision-free route exists (destination walled off): tell the user
-            // instead of driving straight through geometry.
-            route.current = null;
-            setUi({ autopilotRequest: null, autopilotLabel: null, mode: 'drive', notice: `No clear route to ${station.label}.` });
-          } else {
-            route.current = { requestKey, points, index: 0 };
-          }
-        }
-
-        if (route.current) {
-          autopilotActive = true;
-          const activeRoute = route.current;
-          while (activeRoute.index < activeRoute.points.length - 1) {
-            const waypoint = activeRoute.points[activeRoute.index];
-            if (Math.hypot(v.x - waypoint.x, v.z - waypoint.z) > 1.25) break;
-            activeRoute.index++;
-          }
-          const waypoint = activeRoute.points[Math.min(activeRoute.index, activeRoute.points.length - 1)] ?? { x: station.x, z: station.z };
-          const finalTarget = activeRoute.index >= activeRoute.points.length - 1;
-          const { done } = world.stepAutopilot(v, dt, waypoint, finalTarget);
-          if (done) {
-            route.current = null;
-            autopilotActive = false;
-            if (station.kind === 'portal' && station.href) {
-              setUi({ autopilotRequest: null, autopilotLabel: null, mode: 'drive', nearestZone: null });
-              onPortal?.(station.href);
-            } else {
-              setUi({ autopilotRequest: null, autopilotLabel: null, mode: 'drive', nearestZone: station.zone, panelZone: station.zone });
-            }
-          }
-        }
-      }
-    }
-
-    if (!autopilotActive && (ui.panelZone || ui.onboarding || ui.directoryOpen)) {
-      // The world is paused for UI interaction, but any residual velocity is gently removed.
-      world.stepVehicle(v, dt, { power: 0, brake: true, steerCmd: 0 }, null);
-    } else if (!autopilotActive) {
-      const power = input.forward > 0 ? 1 : input.reverse > 0 ? -1 : vehicleState.touchPower;
-      const steerCmd = (input.left ? -1 : 0) + (input.right ? 1 : 0) || vehicleState.touchSteer;
-      world.stepVehicle(v, dt, { power, brake: input.brake, steerCmd }, nearestStationFor(v));
-    }
-
-    const near = nearestStationFor(v);
-    const zone: ZoneId | null = near && Math.hypot(v.x - near.x, v.z - near.z) < near.radius ? near.zone : null;
-    if (zone !== lastZone.current) {
-      lastZone.current = zone;
-      setUi({ nearestZone: zone });
-    }
-  };
+/**
+ * The only place the car moves.
+ *
+ * Player input is read from the shared mutable `input`/`touchInput` objects, so
+ * React never re-renders at 60 fps. Autopilot and manual driving produce the
+ * same `DriveCommand`, which means the autopilot is subject to exactly the same
+ * physics, collisions and boundaries as the player — it cannot cheat through a
+ * building.
+ */
+export function Simulation({
+  grid,
+  bounds,
+  graph,
+  stations,
+}: {
+  grid: CollisionGrid;
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  graph: RouteGraph;
+  stations: StationData[];
+}) {
+  const { vehicleId } = useUi();
+  const physics = useMemo(() => physicsById(vehicleId), [vehicleId]);
+  const lastPublish = useRef(0);
+  const lastNear = useRef<string | null>(null);
+  const lastRoadCheck = useRef(0);
+  const roadName = useRef<string | null>(null);
 
   useFrame((_, dtRaw) => {
-    // One simulation step per rendered frame keeps motion perfectly in step with the
-    // camera and vehicle meshes (a fixed-step accumulator caused visible jitter).
-    // `stepVehicle` sub-divides by distance internally, so speed is still clamped and
-    // the vehicle cannot tunnel through geometry.
-    step(Math.min(dtRaw, 1 / 30));
-    updateAudio(vehicleState.speed);
+    const rt = runtime.current;
+    if (!rt) return;
+    const dt = Math.min(0.1, dtRaw);
+    const car = rt.car;
+    const ui = getUi();
+
+    // --- manual override of an active autopilot -------------------------
+    const manual = input.forward || input.reverse || input.left || input.right || input.brake || touchInput.active;
+    if (ui.autopilot?.status === 'driving' && manual) {
+      cancelNavigation('Manual control — autopilot disengaged.');
+    }
+
+    // --- command --------------------------------------------------------
+    let command: DriveCommand;
+    if (auto.route) {
+      // Sensors follow the *route*, so a building around the corner is not
+      // mistaken for a head-on obstacle.
+      const people = rt.pedestrians ?? [];
+      const routeGap = routeClearance(auto.route, auto.cursor, grid);
+      const peopleGap = pedestrianAlongRoute(auto.route, auto.cursor, people);
+      const ahead = Math.min(routeGap, peopleGap);
+      const result = stepDriveFsm(auto.route, car, auto.fsm, dt, {
+        ahead,
+        behind: clearanceBehind(grid, car),
+        boundary: boundaryAhead(bounds, car),
+        reason: ahead < 3.5 ? (peopleGap <= routeGap ? 'pedestrian' : 'obstacle') : undefined,
+      });
+      auto.cursor = result.cursor;
+      command = result.command;
+
+      if (result.replan && auto.station && auto.replans < 1) {
+        const zone = auto.station.zone;
+        const keep = auto.replans + 1;
+        toast('Route blocked — re-planning from this road.');
+        navigateTo(zone, graph, stations);
+        auto.replans = keep;
+      }
+
+      if (result.state === 'SAFE_FAILURE') {
+        const zone = auto.station?.zone ?? ui.autopilot?.zone ?? 'home';
+        const label = auto.station?.label ?? 'destination';
+        const message = result.message ?? 'The road is blocked and cannot be recovered safely.';
+        resetAuto();
+        rt.route = null;
+        setUi({ autopilot: { zone, label, status: 'failed', message } });
+        toast(message);
+      } else if (result.arrived) {
+        const zone = auto.station?.zone ?? ui.autopilot?.zone ?? 'home';
+        const label = auto.station?.label ?? 'destination';
+        resetAuto();
+        rt.route = null;
+        setUi({
+          autopilot: { zone, label, status: 'arrived' },
+          panel: zone,
+          nearby: zone,
+        });
+        window.setTimeout(() => {
+          if (getUi().autopilot?.status === 'arrived') setUi({ autopilot: null });
+        }, 4200);
+      } else if (ui.autopilot?.status === 'driving') {
+        // Publish FSM state changes, not every frame.
+        if (ui.autopilot.state !== result.state || ui.autopilot.message !== (result.message ?? undefined)) {
+          setUi({
+            autopilot: { ...ui.autopilot, state: result.state, message: result.message ?? undefined },
+          });
+        }
+      }
+    } else {
+      const throttle = input.forward ? 1 : input.reverse ? -1 : touchInput.throttle;
+      const brake = input.brake ? 1 : touchInput.brake;
+      const steer = (input.right ? 1 : 0) - (input.left ? 1 : 0) || touchInput.steer;
+      command = { throttle, brake, steer };
+    }
+
+    // --- physics --------------------------------------------------------
+    advanceCar(car, dt, command, { grid, bounds, physics });
+    rt.route = auto.route;
+
+    // --- telemetry (throttled so React stays idle) ----------------------
+    const now = performance.now();
+    if (now - lastPublish.current > 120) {
+      lastPublish.current = now;
+      if (now - lastRoadCheck.current > 600) {
+        lastRoadCheck.current = now;
+        const snap = snapToGraph(graph, car.x, car.z, undefined);
+        roadName.current = snap.distance < 26 ? graph.edges[snap.edge].name : null;
+      }
+      setTelemetry({
+        speed: Math.abs(car.speed),
+        gear: car.speed < -0.4 ? 'R' : Math.abs(car.speed) < 0.4 ? 'N' : 'D',
+        road: roadName.current,
+        x: car.x,
+        z: car.z,
+        yaw: car.yaw,
+        routeRemaining: auto.route ? Math.max(0, routeLength(auto.route) - auto.cursor) : 0,
+        battery: car.sinceHit < 0.6 ? 'hit' : 'ok',
+      });
+    }
+
+    // --- station proximity ---------------------------------------------
+    let near: StationData | null = null;
+    let best = 34;
+    for (const s of stations) {
+      const d = Math.hypot(car.x - s.x, car.z - s.z);
+      if (d < best) { best = d; near = s; }
+    }
+    const nearZone = near?.zone ?? null;
+    if (nearZone !== lastNear.current) {
+      lastNear.current = nearZone;
+      if (getUi().nearby !== nearZone) setUi({ nearby: nearZone });
+    }
   });
 
   return null;

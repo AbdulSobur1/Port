@@ -1,38 +1,34 @@
 # dependencies
-/node_modules
-/.pnp
-.pnp.*
+node_modules/
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files
-.env*
-!.env.example
+# next.js build output
+.next/
+out/
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
+tests-dist/
 
-# tests
-/tests-dist/
+# raw geographic datasets + downloaded tools (reproducible via scripts/)
+# NOTE: only the *inputs* are ignored. The clipped products that the site
+# actually serves — public/data/*.json and public/map/* — are committed on
+# purpose: the deployment has no geo pipeline step, so a build that does not
+# find them ships a world that cannot load.
+data/
+tools/
 
-# archives
+# the shipped products, force-tracked despite the rules above
+!public/data/
+!public/data/**
+!public/map/
+!public/map/**
+
+# env files
+.env
+.env.local
+
+# archives produced by packaging
 *.zip
 
-# vercel
-.vercel
+# nested clone of this project's remote (its own repo)
+Port/

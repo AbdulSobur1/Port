@@ -1,125 +1,128 @@
-# Soburr — Interactive 3D Portfolio
+# Soburr — a drivable Lagos portfolio
 
-A Next.js App Router portfolio built with React, TypeScript, Three.js, and React Three Fiber. The landing experience is a drivable 3D world split into four cities; every project is also available as an accessible editorial page.
+An interactive portfolio for **Abdul Sobur**: the 3D world is a real
+neighbourhood built from OpenStreetMap data — the **north-west Lagos Island grid
+around Glover, Oshodi and Adeniji Adele** — with real streets, real building
+footprints, a drivable car, a road-following autopilot, and a genuine geographic
+map rendered from our own vector-tile archive. The world is deliberately compact:
+a 561 × 565 m playable core inside a 906 m extraction rectangle, not a district
+scaled down.
 
-## Requirements
+Everything runs on free and open tooling. No paid API, no proprietary map SDK,
+no public tile server, no third-party 3D asset library.
 
-- Node.js 20.9 or newer
-- [pnpm](https://pnpm.io) 10 or newer (this repo is pnpm-managed; do not use `npm install`, which would ignore `pnpm-lock.yaml`)
-
-## Getting started
-
-```bash
+```
 pnpm install
-pnpm dev
+pnpm dev            # http://localhost:3000
 ```
 
-Open http://localhost:3000.
+## What is actually real
+
+| Real | Generated (and labelled as such) |
+| --- | --- |
+| Road centrelines, classes, names, one-way tags, bridges | Building heights for the 54 % of footprints with no height/level tag (deterministic estimates) |
+| Building footprints (900 of them) | Facade/roof materials and window patterns |
+| Water polygons and waterway centrelines | Street trees, street lights and street furniture (placed along road centrelines; OSM maps only one tree and 25 lamps here) |
+| 104 drivable ways curated into one connected network | The nine project "stations" — fictional landmark placements anchored to real streets, never presented as local landmarks |
+
+## Stack
+
+- **Next.js 16.4** (App Router, Turbopack) + **React 19.3**
+- **three 0.183** + **@react-three/fiber 9.8** for the world
+- **MapLibre GL JS 6.14** + **PMTiles 4.5** for the map
+- **pnpm** as the package manager; Node **24** for the extraction scripts
 
 ## Scripts
 
-- `pnpm dev` — start the development server
-- `pnpm build` — production build
-- `pnpm start` — serve the production build
-- `pnpm typecheck` — `tsc --noEmit`
-- `pnpm test` — compile and run the deterministic physics, city, and coordinate-system tests (34 tests)
-
-## Worlds
-
-The landing page is one canvas with four drivable cities, linked by portal gates and the top navigation:
-
-- `/` — **Hub**: spawn point, orientation, and city gates
-- `/work` — **Work city**: every project is a station; the archive and case studies live at `/work/archive` and `/work/[slug]`
-- `/about` — **Gardens**
-- `/contact` — **Signal**
-
-## Art direction
-
-The whole site — editorial pages and the 3D world alike — is a **light, daytime** design: paper and white surfaces, dark text, and a single lime/cyan accent pair. There is no dark theme. Every city is set to daylight (hub noon, work early afternoon, about and contact mid-morning), so the sky, fog, ambient and sun are tuned bright and the buildings, roads and landmark use light facades. See `app/globals.css` for the light token layer and `components/world/world-layout.ts` / `world-cities.ts` for the per-city themes.
-
-The city's road network is **data-driven**: each `WorldLayout` declares `roads` (centre lines with a width and class), optional `rings` (roundabouts) and optional `districts` (themed quarters). `Roads` and `Districts` in `components/world/city.tsx` render them, so a street is a data edit, not a code edit. The visitor's car is a hand-modelled parametric mesh (sculpted body, glass cabin, wheels, head/tail lights) built in the same file — no external model is required.
-
-## Controls
-
-- `W` / `Arrow Up`: accelerate
-- `S` / `Arrow Down`: reverse
-- `A` / `Arrow Left`: steer left
-- `D` / `Arrow Right`: steer right
-- `Space`: brake
-- `E`: inspect the nearest station
-- `M`: toggle the destination map
-- `P`: browse every project (works without driving)
-- `H`: horn
-- `R`: reset vehicle and navigation
-- `Escape`: close panels and release drive inputs
-
-Touch controls are provided for coarse-pointer devices.
-
-## Browsing without driving
-
-The 3D city is a way in, not the only way. First-time visitors get a short welcome card (dismissed once, and reopenable from **How to drive**) explaining the controls and offering **Browse projects** directly.
-
-**Projects** in the top bar, the footer button, or the `P` key opens a full-screen directory: every project with its category, summary, stack, and Case study / Live demo / Source links, plus a **Drive here** button that hands the car to autopilot for that station. Opening any panel pauses the car, and every panel closes with `Escape`. The full editorial archive is always available at `/work/archive`.
-
-
-## The real-world map and the coordinate system
-
-The ground is a **real OpenStreetMap view** rendered by [MapLibre GL JS](https://maplibre.org/) into an offscreen canvas and used as a texture under the designed city — so the world sits on genuine geography rather than a decorative grid.
-
-All geometry shares one documented coordinate system, defined in `components/world/geo.ts`:
-
-- **World space** is right-handed and measured in metres: `+X` = east, `+Z` = north, `+Y` = up, with `(0, 0)` at the city centre.
-- `(0, 0)` is anchored to a real WGS84 point, `WORLD_ORIGIN`. The default is central Abuja, Nigeria.
-- `worldToLatLng` / `latLngToWorld` convert with an equirectangular projection that is accurate to well under a centimetre across a city block; `metersPerDegreeLat/Lng` use the full WGS84 series expansion.
-- The projection is unit-tested in `tests/geo.test.ts`.
-
-If MapLibre, the network, or WebGL is unavailable, the map degrades gracefully to the fully procedural ground — the city is never left without a floor.
-
-### Districts and the road network
-
-The road network is designed as data before any building is placed: each city declares `roads` (centre-lines), `rings` (roundabouts) and `districts` in `components/world/world-layout.ts`. A single `RoadNetwork` renderer draws surfaces, rounded junctions at every crossing, kerbs and sidewalks, on separate depth layers so intersections never z-fight. The hub carries five districts — Arrival Plaza, Work Quarter, Innovation Yard, Reflection Gardens and Landmark Commons. The world is a **bright-day, light-only** experience: every city loads the same clear-noon HDRI and can never render dusk or night. See `docs/world-redesign/world-layout.md`.
-
-### Map configuration
-
-Copy `.env.example` to `.env.local` to override the defaults:
-
-| Variable | Meaning |
+| Command | What it does |
 | --- | --- |
-| `NEXT_PUBLIC_WORLD_MAP` | `off` disables the real map and keeps the procedural ground |
-| `NEXT_PUBLIC_MAP_STYLE_URL` | Your own MapLibre style URL (vector or raster); overrides the keyless OSM raster |
-| `NEXT_PUBLIC_WORLD_ORIGIN` | `"lat,lng"` — the real-world point world `(0,0)` projects onto |
-| `NEXT_PUBLIC_SITE_URL` | Canonical site origin used for metadata and `sitemap.xml` |
+| `pnpm dev` | dev server (copies the MapLibre worker into `public/` first) |
+| `pnpm build` / `pnpm start` | production build / serve |
+| `pnpm typecheck` | `tsc --noEmit` (strict) |
+| `pnpm test` | 41 tests over projection, graph, physics, autopilot and the shipped data |
+| `pnpm run geo:all` | full geographic pipeline (see below) |
 
-Map data © OpenStreetMap contributors.
+## Geographic pipeline
 
-## Open-source assets
+The world and the map are generated from one pinned Geofabrik Nigeria extract
+(2026-10-15, SHA-256 verified, ODbL). The 711 MiB national PBF is processed
+locally and never shipped; only the clipped products are (≈0.7 MiB in total,
+including the PMTiles archive).
 
-The world is dressed with real, PBR-textured 3D assets, all **CC0 1.0** — roads, paving, brick/plaster/tile facades and a clear-noon HDRI environment (Poly Haven), plus glTF street props: lamp posts, benches, planters, hydrants and barriers. The procedural base city always renders underneath, and each asset layer fades in as it loads, so the world never blanks while downloading. Set `NEXT_PUBLIC_WORLD_ASSETS=off` for the fully procedural fallback (no downloads).
+```bash
+node scripts/download-osm.mjs        # Nigeria PBF + md5 verification
+node scripts/download-sources.mjs    # Planetiler jar + public-domain background data
+node scripts/build-tiles.mjs         # → public/map/lagos.pmtiles (PMTiles v3, OSM max zoom 15)
+node scripts/extract-water-from-tiles.mjs
+node scripts/extract-world-data.mjs  # → public/data/* (world, graph, 3 × 3 building chunks, provenance)
+pnpm test
+```
 
-- `public/world/models/` — glTF props (auto-normalised to a target height at load)
-- `public/world/materials/` — PBR surface sets (diffuse / normal / packed ARM)
-- `public/world/environment/` — HDRI skies used for image-based lighting
-- `docs/world-asset-research.md` — how these were selected
-- `docs/THIRD_PARTY_ASSETS.md` — full provenance and licence text
-- `docs/world-art-direction.md`, `docs/world-validation.md` — direction and QA
+Full detail — bounds, tool versions, counts, quality rules, outputs, hosting
+requirements — is in [docs/geo-pipeline.md](docs/geo-pipeline.md). The
+geographic-to-world transform, the physics, the routing and the map/world
+alignment are documented in [docs/architecture.md](docs/architecture.md).
 
-## Rendering quality
+## Coordinates
 
-Rendering starts conservatively on touch-first devices and when reduced motion is requested. Runtime frame sampling lowers the pixel ratio when performance declines and restores it when performance recovers. The scene keeps a small, fixed set of dynamic lights; emissive materials and additive glow sprites carry the neon look. Repeated geometry — road markings, plaza seams, district ring marks, street lamps, and trees — is drawn with `InstancedMesh`, so hundreds of parts cost a handful of draw calls, and all station pads share a single animation frame. Append `?debug=1` to any world URL for a live FPS / draw-call / GPU readout.
+One documented transform, shared by the extraction script, the 3D scene, the
+physics, the autopilot, the map and the tests:
 
-## Structure
+```
+world = Web Mercator metres, origin at the centre of the extraction bounds
++X = east   +Z = north   +Y = up       (WGS84 / EPSG:4326 in, metres out)
+```
 
-- `app/` — App Router pages and global styles
-- `app/work/` — project index, archive, and project detail routes
-- `components/world/` — the drivable world: physics, simulation, city renderer, atmosphere, audio, HUD, and camera
-- `components/work/` — editorial project components
-- `lib/projects.ts` — the project dataset
-- `tests/` — deterministic physics and city-integrity tests
+Mercator metres are a uniform 0.64 % longer than ground metres at 6.456°N, and
+vary by < 0.1 m across the 0.9 km north–south extent of the rectangle. Using
+Mercator keeps the 3D geometry pixel-aligned with the MapLibre basemap, which is
+what map/world alignment requires. See
+[docs/architecture.md](docs/architecture.md#coordinate-system).
 
-## Content
+## Driving
 
-Project descriptions and technology labels come from `lib/projects.ts`. Keep claims and external links evidence-based. Conceptual artwork on the editorial pages is generated with CSS as a visual treatment; it is not a screenshot of a deployed product.
+| Key | Action |
+| --- | --- |
+| `W` `A` `S` `D` / arrows | drive |
+| `Space` | brake |
+| `E` | inspect the destination you are parked at |
+| `M` | map |
+| `R` | return to the arrival point |
+| `Esc` | close the panel / map, or cancel the autopilot |
 
-## Deployment
+Pick **Destinations → Drive** to hand over to the autopilot: it plans an A*
+route across the real road graph, shows that exact polyline on the map and on
+the ground, and follows it at a curvature-limited speed. Any manual input takes
+over immediately. If the destination's road is not connected to yours, the drive
+fails with the reason instead of inventing a path.
 
-Deployed on Vercel, which builds with pnpm from `pnpm-lock.yaml`. Run `pnpm install`, `pnpm typecheck`, and `pnpm build` locally before pushing.
+## Attribution and licences
+
+- **Map data and geometry:** © OpenStreetMap contributors, licensed **ODbL 1.0**.
+- **Vector tiles:** built locally from the Geofabrik Nigeria extract with
+  Planetiler (OpenMapTiles schema — © OpenMapTiles).
+- **Tile format:** PMTiles (BSD-3-Clause, Protomaps).
+- **Map renderer:** MapLibre GL JS (BSD-3-Clause).
+- **Glyphs:** Noto Sans (`OFL-1.1`), vendored locally.
+- **No third-party textures, models or HDRIs** are bundled: every 3D material is
+  generated procedurally in the browser. See
+  [docs/asset-manifest.md](docs/asset-manifest.md).
+
+## Known limitations
+
+- The 3D city is **not photogrammetry**. No free, legally reusable capture of
+  this area exists, so realism comes from real footprints, real road geometry,
+  PBR materials, image-based lighting and retained detail near the camera.
+- The road network is **curated, not redesigned**: non-car ways, dead-end stubs
+  under 45 m and ways outside the main connected component are removed. A
+  surviving cul-de-sac is real street geometry; the extraction edge is still an
+  edge.
+- Building heights are estimates for 54 % of footprints (documented, deterministic).
+- Multipolygon inner rings (courtyards) are dropped; buildings crossing the
+  rectangle are skipped rather than clipped.
+- No terrain elevation — Lagos is coastal plain; the ground is a flat plane at 0 m.
+- Touch controls appear on coarse-pointer devices; they have been layout-tested,
+  not driven on real hardware.
+
+See [IMPLEMENTATION-REPORT.md](IMPLEMENTATION-REPORT.md) for test results and the
+full list of what was verified.

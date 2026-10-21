@@ -1,42 +1,27 @@
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
-import { siteAuthor, siteDescription, siteName, siteTitle, siteUrl } from '@/lib/site';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import './globals.css';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  title: { default: siteTitle, template: `%s — ${siteName}` },
-  description: siteDescription,
-  applicationName: `${siteName} Portfolio`,
-  authors: [{ name: siteAuthor }],
-  creator: siteAuthor,
-  keywords: ['Soburr', 'Abdul Sobur', 'software engineer', 'portfolio', 'React', 'Next.js', 'TypeScript', 'Three.js', 'AI', 'fintech'],
-  alternates: { canonical: '/' },
-  openGraph: {
-    type: 'website',
-    url: siteUrl,
-    siteName,
-    title: siteTitle,
-    description: siteDescription,
+  title: 'Soburr — a drivable Lagos portfolio',
+  description:
+    'An interactive portfolio set in a compact Lagos Island neighbourhood: real OpenStreetMap streets and building footprints, a drivable car, road-network autopilot and a MapLibre map built from a local PMTiles archive.',
+  other: {
+    'format-detection': 'telephone=no',
   },
-  twitter: { card: 'summary_large_image', title: siteTitle, description: siteDescription },
-  robots: { index: true, follow: true },
 };
 
 export const viewport: Viewport = {
-  themeColor: '#09100f',
-  colorScheme: 'dark',
+  width: 'device-width',
+  initialScale: 1,
   viewportFit: 'cover',
+  themeColor: '#070d0e',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>
-        {children}
-        <Script src="/_vercel/insights/script.js" strategy="afterInteractive" />
-        <Script src="/_vercel/speed-insights/script.js" strategy="afterInteractive" />
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
