@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { RouteGraph } from '@/lib/geo/graph';
 import { destinationByZone, destinations, dossierFor } from '@/lib/world/destinations';
+import { districtById, districts, streetPlan } from '@/lib/works';
 import { MapPanel } from './map-panel';
 import { VehicleSelect } from './vehicle-select';
 import { cancelNavigation, navigateTo } from './navigation';
@@ -34,13 +35,15 @@ export function useKeyboardControls(enabled: boolean) {
     const down = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target && /input|textarea|select/i.test(target.tagName)) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const key = event.key.toLowerCase();
+      if ((getUi().vehicleSelect || getUi().intro) && key !== 'escape') return;
       if (key === 'w' || key === 'arrowup') input.forward = true;
       if (key === 's' || key === 'arrowdown') input.reverse = true;
       if (key === 'a' || key === 'arrowleft') input.left = true;
       if (key === 'd' || key === 'arrowright') input.right = true;
       if (key === ' ') input.brake = true;
-      if (['w', 'a', 's', 'd', ' '].includes(key) && key !== ' ') event.preventDefault();
+      if (['w', 'a', 's', 'd', ' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key) && !(target && /button|a/i.test(target.tagName) && key === ' ')) event.preventDefault();
       if (key === 'e') {
         const zone = getUi().nearby;
         if (zone) openDestination(zone);
@@ -48,7 +51,8 @@ export function useKeyboardControls(enabled: boolean) {
       if (key === 'r') resetCar();
       if (key === 'm') setUi({ mapOpen: !getUi().mapOpen, mapExpanded: false });
       if (key === 'escape') {
-        if (getUi().vehicleSelect && storedVehicleId()) setUi({ vehicleSelect: false });
+        if (getUi().vehicleSelect) setUi({ vehicleSelect: false });
+        else if (getUi().rail) setUi({ rail: false });
         else if (getUi().panel) setUi({ panel: null });
         else if (getUi().mapOpen) setUi({ mapOpen: false });
         else if (getUi().autopilot?.status === 'driving') cancelNavigation('Autopilot cancelled.');
@@ -104,7 +108,7 @@ function TopBar() {
     <header className="hud-top">
       <div className="hud-brand">
         <span className="hud-brand__mark">SOBURR</span>
-        <span className="hud-brand__sub">Lagos Island / Glover</span>
+        <span className="hud-brand__sub">Portfolio map</span>
       </div>
 
       <div className="hud-top__center">
@@ -115,7 +119,7 @@ function TopBar() {
           aria-controls="destination-rail"
         >
           <span className="hud-pill__dot" />
-          Destinations
+          Street guide
           <span className="hud-pill__count">{destinations.length}</span>
         </button>
         {autopilot?.status === 'driving' && (
@@ -149,8 +153,8 @@ function TopBar() {
         >
           <span aria-hidden>◎</span>
         </button>
-        <Link className="hud-icon" href="/work/bytebank" aria-label="Open the latest case record">
-          <span aria-hidden>↗</span>
+        <Link className="hud-icon" href="/work" aria-label="Read all work as a plain list">
+          <span aria-hidden>☰</span>
         </Link>
       </div>
     </header>
@@ -167,46 +171,75 @@ function DestinationRail({ graph }: { graph: RouteGraph | null }) {
 
   if (!rail) return null;
   return (
-    <aside className="rail" id="destination-rail" aria-label="Destinations">
+    <aside className="rail" id="destination-rail" aria-label="Street guide">
       <header className="rail__head">
-        <p className="rail__eyebrow">Drive or inspect</p>
-        <button className="rail__close" onClick={() => setUi({ rail: false })} aria-label="Close destinations">✕</button>
+        <div>
+          <p className="rail__eyebrow">Street guide</p>
+          <p className="rail__how">Each street holds one kind of work. Tap a name to read it. Tap Drive and the car takes you there.</p>
+        </div>
+        <button className="rail__close" onClick={() => setUi({ rail: false })} aria-label="Close street guide">✕</button>
       </header>
-      <ol className="rail__list">
-        {destinations.map((dest, index) => {
-          const station = rt?.stations.find((s) => s.zone === dest.zone);
-          const isNear = nearby === dest.zone;
-          const isTarget = autopilot?.zone === dest.zone && autopilot.status === 'driving';
+      <div className="rail__scroll">
+        {streetPlan.map((plan) => {
+          const district = districtById(plan.district);
+          const items = plan.zones.map((z) => destinationByZone(z)).filter(Boolean) as NonNullable<ReturnType<typeof destinationByZone>>[];
           return (
-            <li key={dest.zone} data-active={isNear || isTarget}>
-              <button
-                className="rail__item"
-                onClick={() => openDestination(dest.zone)}
-                aria-label={`Inspect ${dest.label}`}
-              >
-                <span className="rail__index">{String(index + 1).padStart(2, '0')}</span>
-                <span className="rail__text">
-                  <strong>{dest.label}</strong>
-                  <small>{station?.road ?? dest.sub}</small>
+            <section key={district.id} className="rail__street" style={{ ['--street' as string]: district.color }}>
+              <h2 className="rail__streethead">
+                <StreetMark shape={district.shape} color={district.color} />
+                <span>
+                  <strong>{district.name}</strong>
+                  <small>{district.street}</small>
                 </span>
-                <span className="rail__swatch" style={{ background: dest.color }} />
-              </button>
-              <button
-                className="rail__drive"
-                onClick={() => station && graph && navigateTo(dest.zone, graph, rt?.stations ?? [])}
-                aria-label={`Drive to ${dest.label}`}
-                disabled={!station || !graph}
-              >
-                Drive
-              </button>
-            </li>
+              </h2>
+              <p className="rail__streetblurb">{district.blurb}</p>
+              <ul className="rail__list">
+                {items.map((dest) => {
+                  const station = rt?.stations.find((s) => s.zone === dest.zone);
+                  const isNear = nearby === dest.zone;
+                  const isTarget = autopilot?.zone === dest.zone && autopilot.status === 'driving';
+                  return (
+                    <li key={dest.zone} data-active={isNear || isTarget}>
+                      <button className="rail__item" onClick={() => openDestination(dest.zone)} aria-label={`Read about ${dest.label}`}>
+                        <span className="rail__text">
+                          <strong>{dest.label}</strong>
+                          <small>{dest.sub}{dest.status ? ` · ${dest.status}` : ''}</small>
+                        </span>
+                      </button>
+                      <button
+                        className="rail__drive"
+                        onClick={() => station && graph && navigateTo(dest.zone, graph, rt?.stations ?? [])}
+                        aria-label={`Drive to ${dest.label}`}
+                        disabled={!station || !graph}
+                      >
+                        Drive
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
           );
         })}
-      </ol>
+      </div>
       <footer className="rail__foot">
-        <button className="world-button" onClick={resetCar}>Return to arrival</button>
+        <button className="world-button" onClick={resetCar}>Back to the start</button>
+        <Link className="world-button" href="/work">Plain list</Link>
       </footer>
     </aside>
+  );
+}
+
+export function StreetMark({ shape, color, size = 18 }: { shape: string; color: string; size?: number }) {
+  const common = { fill: color, stroke: '#0f1c2e', strokeWidth: 1.5 } as const;
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden focusable="false" className="street-mark">
+      {shape === 'circle' && <circle cx="10" cy="10" r="8" {...common} />}
+      {shape === 'square' && <rect x="2.5" y="2.5" width="15" height="15" {...common} />}
+      {shape === 'triangle' && <polygon points="10,2 18.5,17.5 1.5,17.5" {...common} />}
+      {shape === 'diamond' && <polygon points="10,1.5 18.5,10 10,18.5 1.5,10" {...common} />}
+      {shape === 'hexagon' && <polygon points="5.5,2.5 14.5,2.5 19,10 14.5,17.5 5.5,17.5 1,10" {...common} />}
+    </svg>
   );
 }
 
@@ -226,6 +259,7 @@ function DossierSheet({ zone, graph }: { zone: string; graph: RouteGraph | null 
 
   if (!dossier) return null;
   const station = rt?.stations.find((s) => s.zone === zone);
+  const showGaps = process.env.NEXT_PUBLIC_SHOW_GAPS !== '0';
 
   return (
     <div className="dossier-backdrop" onClick={() => setUi({ panel: null })}>
@@ -237,20 +271,15 @@ function DossierSheet({ zone, graph }: { zone: string; graph: RouteGraph | null 
         tabIndex={-1}
         ref={ref}
         onClick={(e) => e.stopPropagation()}
-        style={{ ['--accent' as string]: dest?.color ?? '#d8f851' }}
+        style={{ ['--accent' as string]: dest?.color ?? '#f2b300' }}
       >
         <header className="dossier__head">
           <p className="dossier__eyebrow">{dossier.eyebrow}</p>
           <button className="dossier__close" onClick={() => setUi({ panel: null })} aria-label="Close">✕</button>
         </header>
         <h1 id="dossier-title">{dossier.title}</h1>
+        {dossier.status && <p className="dossier__status">{dossier.status}{dossier.confidential ? ' · Details are confidential' : ''}</p>}
         <p className="dossier__lede">{dossier.lede}</p>
-
-        {station && (
-          <p className="dossier__place">
-            <span aria-hidden>◉</span> Station on {station.road ?? 'an unnamed service road'} · {station.roadClass}
-          </p>
-        )}
 
         {dossier.facts && (
           <dl className="dossier__facts">
@@ -263,14 +292,21 @@ function DossierSheet({ zone, graph }: { zone: string; graph: RouteGraph | null 
           </dl>
         )}
 
+        {dossier.story?.map((part) => (
+          <div className="dossier__copy" key={part.heading}>
+            <h2>{part.heading}</h2>
+            <p>{part.body}</p>
+          </div>
+        ))}
         {dossier.body?.map((paragraph) => (
           <p className="dossier__copy" key={paragraph.slice(0, 24)}>{paragraph}</p>
         ))}
 
-        {dossier.tags && (
-          <ul className="dossier__tags">
-            {dossier.tags.map((tag) => <li key={tag}>{tag}</li>)}
-          </ul>
+        {showGaps && dossier.gaps && dossier.gaps.length > 0 && (
+          <div className="gaps" role="note">
+            <strong>Still to add (only you see this)</strong>
+            <ul>{dossier.gaps.map((g) => <li key={g}>{g}</li>)}</ul>
+          </div>
         )}
 
         <div className="dossier__actions">
@@ -279,16 +315,13 @@ function DossierSheet({ zone, graph }: { zone: string; graph: RouteGraph | null 
               {dossier.primaryLabel}
             </Link>
           )}
-          {dossier.externalHref && (
-            <a className="world-button world-button--primary" href={dossier.externalHref} target="_blank" rel="noreferrer">
-              Open GitHub profile
+          {dossier.links?.map((l) => (
+            <a key={l.href} className="world-button world-button--primary" href={l.href} target="_blank" rel="noreferrer">
+              {l.label}
             </a>
-          )}
+          ))}
           {station && graph && (
-            <button
-              className="world-button"
-              onClick={() => navigateTo(zone, graph, rt?.stations ?? [])}
-            >
+            <button className="world-button" onClick={() => navigateTo(zone, graph, rt?.stations ?? [])}>
               Drive here
             </button>
           )}
@@ -361,36 +394,38 @@ function Intro() {
   const { intro } = useUi();
   if (!intro) return null;
   return (
-    <div className="intro">
+    <div className="intro" role="dialog" aria-modal="true" aria-labelledby="intro-title">
       <div className="intro__card">
-        <p className="dossier__eyebrow">Soburr / interactive portfolio</p>
-        <h1>Lagos Island, at street scale.</h1>
+        <p className="dossier__eyebrow">Abdulsobur’s portfolio</p>
+        <h1 id="intro-title">A street map of everything I have built.</h1>
         <p>
-          A real neighbourhood built from OpenStreetMap data: {''}
-          <strong>real streets, real building footprints</strong>, one drivable world. Pick a
-          destination, drive there, or let the autopilot follow the road network.
+          Each street holds one kind of work. Each building on a street is one project, with its
+          name on the sign. Drive between them, or open the street guide and tap a name.
         </p>
-        <ul className="intro__keys">
-          <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive</li>
-          <li><kbd>E</kbd> inspect</li>
-          <li><kbd>M</kbd> map</li>
-          <li><kbd>R</kbd> reset</li>
+        <ul className="intro__streets">
+          {districts.map((d) => (
+            <li key={d.id}>
+              <StreetMark shape={d.shape} color={d.color} size={22} />
+              <span>
+                <strong>{d.name}</strong>
+                <small>{d.street}. {d.blurb}</small>
+              </span>
+            </li>
+          ))}
         </ul>
+        <p className="intro__keys-line">
+          Drive with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the arrow keys. Press <kbd>E</kbd> at a building to read about it.
+        </p>
         <div className="intro__actions">
           <button className="world-button world-button--primary" onClick={() => setUi({ intro: false })}>
             Start driving
           </button>
-          <button
-            className="world-button"
-            onClick={() => {
-              setUi({ intro: false });
-              openDestination('about');
-            }}
-          >
-            Browse the work
+          <button className="world-button" onClick={() => setUi({ intro: false, rail: true })}>
+            Open the street guide
           </button>
+          <Link className="world-button" href="/work">See a plain list</Link>
         </div>
-        <p className="intro__note">Data © OpenStreetMap contributors (ODbL). World and tiles built from the 2026-10-15 snapshot.</p>
+        <p className="intro__note">Streets and buildings come from OpenStreetMap data © OpenStreetMap contributors (ODbL). The project buildings are mine.</p>
       </div>
     </div>
   );
@@ -482,7 +517,7 @@ function playableLabel(): string {
 
 export function Hud({ graph }: { graph: RouteGraph | null }) {
   const { panel, touch, nearby, vehicleSelect, phase, toast: toastState } = useUi();
-  useKeyboardControls(phase === 'ready' && !vehicleSelect);
+  useKeyboardControls(phase === 'ready');
 
   useEffect(() => {
     const isTouch = window.matchMedia('(pointer: coarse)').matches;
@@ -493,15 +528,15 @@ export function Hud({ graph }: { graph: RouteGraph | null }) {
       reducedMotion: reduced,
       intro: !isTouch,
       vehicleId: saved ?? DEFAULT_VEHICLE_ID,
-      // A first-time visitor picks a car before the intro; returning visitors
-      // go straight back to the street with their saved choice.
-      vehicleSelect: !saved,
+      // Nobody should have to pick a car before they can read the work. The
+      // garage is one tap away from the top bar.
+      vehicleSelect: false,
     });
   }, []);
 
   return (
     <>
-      <a className="skip-link" href="#portfolio-fallback">Skip to the project list</a>
+      <a className="skip-link" href="/work">Skip to the plain list of work</a>
       {phase === 'ready' && <VehicleSelect />}
       <TopBar />
       <DestinationRail graph={graph} />

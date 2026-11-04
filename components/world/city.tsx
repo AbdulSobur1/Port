@@ -435,7 +435,7 @@ export function Stations({ stations, onSelect }: { stations: StationData[]; onSe
 
 function Station({ station, index, onSelect }: { station: StationData; index: number; onSelect?: (zone: string) => void }) {
   const dest = destinationByZone(station.zone);
-  const color = dest?.color ?? '#d8f851';
+  const color = dest?.color ?? '#f2b300';
   const title = dest?.label ?? station.label;
   const subtitle = dest?.sub ?? 'Destination';
   const height = station.zone === 'home' ? 3.4 : 4.2 + (index % 3) * 0.9;

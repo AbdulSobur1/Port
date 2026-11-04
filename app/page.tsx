@@ -1,3 +1,5 @@
-import { WorldScene } from '@/components/world/world-scene';
+import { Experience } from '@/components/experience';
 
-export default function Home() { return <WorldScene />; }
+export default function Home() {
+  return <Experience />;
+}
