@@ -1,12 +1,8 @@
-import { projects } from '@/lib/projects';
+import { districtById, pageStops, works, type DistrictId, type WorkStatus } from '@/lib/works';
 
 /**
- * Destinations are the portfolio's stops in the world.
- *
- * The *placement* comes from the extracted OSM road network (see
- * scripts/geo-config.mjs STATIONS); everything here is copy and colour. The
- * five project stops map 1:1 to `lib/projects.ts` so a project can never be
- * described in the world differently from its case page.
+ * Destinations are the stops in the world. Placement comes from the road data
+ * (scripts/place-streets.mjs); every word comes from lib/works.ts.
  */
 
 export type DestinationKind = 'project' | 'page';
@@ -14,102 +10,93 @@ export type DestinationKind = 'project' | 'page';
 export type Destination = {
   zone: string;
   label: string;
+  /** What kind of thing it is, in plain words. */
   sub: string;
+  line: string;
   color: string;
   kind: DestinationKind;
-  /** Case-record route for projects. */
+  district: DistrictId;
+  status?: WorkStatus;
   href?: string;
 };
 
-const projectDestinations: Destination[] = projects.map((project) => ({
-  zone: `project:${project.slug}`,
-  label: project.title,
-  sub: project.category,
-  color: project.color,
+const workDestinations: Destination[] = works.map((w) => ({
+  zone: `project:${w.slug}`,
+  label: w.title,
+  sub: w.kind,
+  line: w.line,
+  color: districtById(w.district).color,
   kind: 'project',
-  href: `/work/${project.slug}`,
+  district: w.district,
+  status: w.status,
+  href: `/work/${w.slug}`,
 }));
 
-export const destinations: Destination[] = [
-  ...projectDestinations,
-  { zone: 'about', label: 'Archive', sub: 'About Soburr', color: '#cdd5ce', kind: 'page' },
-  { zone: 'skills', label: 'Systems', sub: 'How the work is made', color: '#cdd5ce', kind: 'page' },
-  { zone: 'contact', label: 'Signal Room', sub: 'Contact', color: '#d8f851', kind: 'page' },
-];
+const pageDestinations: Destination[] = pageStops.map((p) => ({
+  zone: p.zone,
+  label: p.title,
+  sub: p.kind,
+  line: p.line,
+  color: districtById(p.district).color,
+  kind: 'page',
+  district: p.district,
+}));
+
+export const destinations: Destination[] = [...pageDestinations.filter((p) => p.zone === 'home'), ...workDestinations, ...pageDestinations.filter((p) => p.zone !== 'home')];
 
 export const destinationByZone = (zone: string | null | undefined) =>
   zone ? destinations.find((d) => d.zone === zone) : undefined;
 
-export const destinationColor = (zone: string): string => destinationByZone(zone)?.color ?? '#d8f851';
+export const destinationColor = (zone: string): string => destinationByZone(zone)?.color ?? '#f2b300';
 
 export type Dossier = {
   eyebrow: string;
   title: string;
   lede: string;
+  status?: WorkStatus;
   facts?: { label: string; value: string }[];
+  story?: { heading: string; body: string }[];
   body?: string[];
-  tags?: string[];
+  gaps?: string[];
+  confidential?: boolean;
   primaryHref?: string;
   primaryLabel?: string;
-  externalHref?: string;
+  links?: { label: string; href: string }[];
 };
 
 export function dossierFor(zone: string): Dossier | null {
   if (zone.startsWith('project:')) {
-    const slug = zone.slice('project:'.length);
-    const project = projects.find((p) => p.slug === slug);
-    if (!project) return null;
+    const w = works.find((x) => `project:${x.slug}` === zone);
+    if (!w) return null;
+    const d = districtById(w.district);
     return {
-      eyebrow: `${project.number} / ${project.category}`,
-      title: project.title,
-      lede: project.summary,
+      eyebrow: `${d.name} on ${d.street}`,
+      title: w.title,
+      lede: w.line,
+      status: w.status,
       facts: [
-        { label: 'Role', value: project.role },
-        { label: 'Team', value: project.team },
-        { label: 'Stack', value: project.stack.join(' · ') },
+        { label: 'What it is', value: w.kind },
+        { label: 'My role', value: w.role },
+        { label: 'Team', value: w.team },
+        ...(w.stack.length ? [{ label: 'Built with', value: w.stack.join(', ') }] : []),
       ],
-      body: [project.problem, project.direction],
-      primaryHref: `/work/${project.slug}`,
-      primaryLabel: 'Open the case record',
+      story: w.story.slice(0, 2),
+      gaps: w.gaps,
+      confidential: w.confidential,
+      links: w.links,
+      primaryHref: `/work/${w.slug}`,
+      primaryLabel: 'Read the full story',
     };
   }
-
-  if (zone === 'about') {
-    return {
-      eyebrow: 'Archive / about',
-      title: 'Systems with a reason to exist.',
-      lede: 'Soburr builds products where design, engineering and real operating constraints meet — across AI, fintech, healthcare, community and culture.',
-      body: [
-        'The city is the index. Every stop is a piece of work, and the drive between stops is the point: this is a portfolio you move through, not a page you scroll.',
-        'Everything you see here is built from real geographic data — OpenStreetMap road and building geometry for a compact Lagos Island neighbourhood around Glover and Oshodi streets, projected into a single world coordinate system and rendered locally.',
-      ],
-      tags: ['Product thinking', 'Full-stack engineering', 'Creative technology'],
-    };
-  }
-
-  if (zone === 'skills') {
-    return {
-      eyebrow: 'Systems / practice',
-      title: 'From product questions to robust systems.',
-      lede: 'Interaction design, front-end systems and full-stack product engineering.',
-      body: [
-        'TypeScript, React, Next.js and Three.js power this world. Protocol design, platform thinking and plain language power the decisions behind it.',
-        'The map and the 3D scene share one coordinate system derived from a verified OSM snapshot, so a road drawn on the map is the road the car drives on.',
-      ],
-      tags: ['TypeScript', 'React', 'Next.js', 'Three.js / R3F', 'MapLibre', 'Product design'],
-    };
-  }
-
-  if (zone === 'contact') {
-    return {
-      eyebrow: 'Signal room',
-      title: 'Have a difficult, useful thing to build?',
-      lede: 'The GitHub profile is the current verified public route for Soburr.',
-      body: ['Issues and pull requests are the best way to start a conversation. No contact form, no invented availability.'],
-      tags: ['GitHub', 'Collaboration'],
-      externalHref: 'https://github.com/AbdulSobur1',
-    };
-  }
-
-  return null;
+  const p = pageStops.find((x) => x.zone === zone);
+  if (!p) return null;
+  const d = districtById(p.district);
+  return {
+    eyebrow: zone === 'home' ? 'Start of the street' : `${d.name} on ${d.street}`,
+    title: p.title,
+    lede: p.line,
+    body: p.body,
+    gaps: p.gaps,
+    links: p.links,
+  };
 }

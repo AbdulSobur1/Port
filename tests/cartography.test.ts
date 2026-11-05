@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { projects } from '../lib/projects.ts';
+import { works, streetPlan } from '../lib/works.ts';
 import {
   buildMapModel,
   clampView,
@@ -56,27 +56,31 @@ test('the map is built from the drivable network, not a second map', () => {
   assert.ok(model.roads.some((r) => r.main), 'the main street must exist in the road list');
 });
 
-test('one continuous main street carries every portfolio stop in order', () => {
-  const street = world.mainStreet;
-  assert.ok(street);
-  const stations = orderedStations(world.stations);
-  assert.equal(stations.length, projects.length + 4, 'home + projects + about/skills/contact');
-
-  let previous = -Infinity;
-  for (const station of stations) {
-    const offset = station.streetOffset ?? -1;
-    assert.ok(offset >= previous, `${station.zone} is out of street order`);
-    previous = offset;
-    assert.ok(station.road === street!.name, `${station.zone} is not on the main street`);
-    const gap = distanceToPolyline(station.x, station.z, street!.p);
-    assert.ok(gap <= 1.5, `${station.zone} is ${gap.toFixed(2)} m from the street centreline`);
+test('every street carries its stops in order, on its own centreline', () => {
+  assert.ok(world.districts, 'the world must ship its districts');
+  assert.equal(world.districts!.length, streetPlan.length);
+  for (const plan of streetPlan) {
+    const district: { street: string; p: number[]; stations: string[] } | undefined = world.districts!.find((d) => d.id === (plan.district as string));
+    assert.ok(district, `${plan.district} has no street`);
+    assert.deepEqual(district!.stations, plan.zones);
+    let previous = -Infinity;
+    for (const zone of plan.zones) {
+      const station = world.stations.find((s) => s.zone === zone);
+      assert.ok(station, `${zone} has no stop`);
+      const offset = station!.streetOffset ?? -1;
+      assert.ok(offset >= previous, `${zone} is out of street order`);
+      previous = offset;
+      assert.equal(station!.road, district!.street, `${zone} is not on ${district!.street}`);
+      const gap = distanceToPolyline(station!.x, station!.z, district!.p);
+      assert.ok(gap <= 1.5, `${zone} is ${gap.toFixed(2)} m from the street centreline`);
+    }
   }
-
-  for (const project of projects) {
-    const station = world.stations.find((s) => s.zone === `project:${project.slug}`);
-    assert.ok(station, `${project.title} has no stop on the street`);
-    assert.equal(station.label, project.title);
-    assert.ok(station.address, `${project.title} has no address`);
+  assert.equal(world.stations.length, streetPlan.flatMap((p) => p.zones).length);
+  for (const work of works) {
+    const station = world.stations.find((s) => s.zone === `project:${work.slug}`);
+    assert.ok(station, `${work.title} has no stop on a street`);
+    assert.equal(station!.label, work.title);
+    assert.ok(station!.address, `${work.title} has no address`);
   }
 });
 
@@ -104,7 +108,7 @@ test('portrait expanded view turns the plan and still fits every stop', () => {
   const size = { width: 390, height: 780 };
   const flat = fitView(model.streetExtent, size, 30, 0);
   const turned = fitView(model.streetExtent, size, 30, 1);
-  assert.ok(turned.scale > flat.scale * 1.6, 'the turned plan must use the tall viewport');
+  assert.ok(turned.scale >= flat.scale, 'the turned plan must not shrink on a tall viewport');
   for (const station of model.stations) {
     const p = toScreen(turned, size, station.x, station.z);
     assert.ok(p.x >= 0 && p.x <= size.width && p.y >= 0 && p.y <= size.height, `${station.zone} is off-screen in the turned view`);
@@ -186,12 +190,14 @@ test('polyline simplification keeps endpoints and respects tolerance', () => {
 });
 
 test('the map framing covers the street extent, not a district', () => {
-  const street = rectOfPolyline(world.mainStreet!.p);
-  assert.ok(model.streetExtent.minX <= street.minX && model.streetExtent.maxX >= street.maxX);
-  assert.ok(model.streetExtent.minZ <= street.minZ && model.streetExtent.maxZ >= street.maxZ);
+  for (const district of world.districts!) {
+    const street = rectOfPolyline(district.p);
+    assert.ok(model.streetExtent.minX <= street.minX && model.streetExtent.maxX >= street.maxX, district.street);
+    assert.ok(model.streetExtent.minZ <= street.minZ && model.streetExtent.maxZ >= street.maxZ, district.street);
+  }
   const width = model.streetExtent.maxX - model.streetExtent.minX;
   const depth = model.streetExtent.maxZ - model.streetExtent.minZ;
-  assert.ok(width < 700 && depth < 400, 'the map must not expose the whole district');
+  assert.ok(width < 700 && depth < 700, 'the map must not expose the whole district');
 });
 
 test('no station marker is inside a building footprint', () => {

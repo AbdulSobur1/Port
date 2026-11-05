@@ -17,6 +17,7 @@
  */
 
 import type { StationData } from './types';
+import { distanceToPolyline } from './main-street.ts';
 
 export type ShopStyle = 'shopfront' | 'studio' | 'gallery' | 'office' | 'clinic' | 'pavilion';
 
@@ -58,12 +59,17 @@ export type PlacementOptions = {
   /** Building front distance from the centreline, metres. */
   frontOffset: number;
   playable: { minX: number; maxX: number; minZ: number; maxZ: number };
+  /** Every carriageway, so a plot never lands on another street. */
+  roads: { pts: number[]; halfWidth: number }[];
+  /** District id to sign colour. */
+  colors?: Record<string, string>;
 };
 
 const DEFAULT_OPTIONS: PlacementOptions = {
   roadHalfWidth: 7.5,
   frontOffset: 15,
   playable: { minX: -280, maxX: 280, minZ: -282, maxZ: 282 },
+  roads: [],
 };
 
 /** Deterministic 0..1 from a string. */
@@ -145,7 +151,7 @@ function styleFor(zone: string, index: number): ShopStyle {
   return byIndex[index % byIndex.length];
 }
 
-const PALETTE = ['#d8f851', '#6de0dd', '#ffb467', '#ff7863', '#cdd5ce'];
+const PALETTE = ['#f2b300', '#6de0dd', '#ffb467', '#ff7863', '#cdd5ce'];
 
 /**
  * Place one designed building per station.
@@ -187,6 +193,15 @@ export function placeProjectBuildings(
         let collisions = 0;
         for (const b of originalBoxes) if (overlaps(box, b, 1.5)) collisions++;
         for (const b of taken) if (overlaps(box, b, 2.5)) collisions += 3;
+        // Another street under the plot is worse than any crowded block.
+        for (const road of opts.roads) {
+          let hit = false;
+          for (let k = 0; k < footprint.length && !hit; k += 2) {
+            hit = distanceToPolyline(road.pts, footprint[k], footprint[k + 1]) < road.halfWidth + 2.5;
+          }
+          if (!hit) hit = distanceToPolyline(road.pts, c.x, c.z) < road.halfWidth + 2.5;
+          if (hit && distanceToPolyline(road.pts, station.x, station.z) > 1) collisions += 6;
+        }
         // Slight preference for the first side (the visual "front" of the
         // street) and for keeping the frontage close to the kerb.
         const score = collisions * 100 + extra * 2 + (side === -1 ? 1 : 0) + seed * 0.01;
@@ -235,7 +250,7 @@ export function placeProjectBuildings(
       zone: station.zone,
       label: station.label,
       address: station.address ?? station.road ?? 'Adeniji Adele Road',
-      color: PALETTE[index % PALETTE.length],
+      color: opts.colors?.[station.district ?? ''] ?? PALETTE[index % PALETTE.length],
       style,
       x: centre.x,
       z: centre.z,

@@ -18,6 +18,9 @@ import {
 } from '@/lib/world/cartography';
 import { loadBuildingChunk } from '@/lib/world/data';
 import { destinationByZone, destinations } from '@/lib/world/destinations';
+import { districtById, type DistrictId } from '@/lib/works';
+
+const districtColor = (id: string) => districtById(id as DistrictId)?.color ?? '#f2b300';
 import type { Building, StationData } from '@/lib/world/types';
 import { navigateTo } from './navigation';
 import { openDestination, runtime, setUi, useUi } from './store';
@@ -58,8 +61,8 @@ const PALETTE = {
   casing: '#0a1110',
   marking: '#b9bfad',
   crossing: '#cfd5c3',
-  route: '#d8f851',
-  car: '#d8f851',
+  route: '#f2b300',
+  car: '#f2b300',
   label: '#e6efe8',
   muted: '#9aa79e',
 };
@@ -79,7 +82,7 @@ function turnFor(size: MapSize, expanded: boolean): 0 | 1 {
 }
 
 function stationColor(zone: string): string {
-  return destinationByZone(zone)?.color ?? '#d8f851';
+  return destinationByZone(zone)?.color ?? '#f2b300';
 }
 
 function stationLabel(zone: string, station: StationData): string {
@@ -192,29 +195,33 @@ function paint(args: {
     ctx.restore();
   }
 
-  // The street gets a name on the plan, set along its own centreline. It is
-  // drawn from `world.mainStreet`, so the label follows the same polyline the
-  // car and the route use.
-  if (expanded && model.street && model.street.p.length >= 8) {
-    const p = model.street.p;
-    const mid = Math.floor(p.length / 4) * 2;
-    const a = toScreen(view, size, p[mid], p[mid + 1]);
-    const b = toScreen(view, size, p[mid + 2], p[mid + 3]);
-    let angle = Math.atan2(b.y - a.y, b.x - a.x);
-    if (angle > Math.PI / 2 || angle < -Math.PI / 2) angle += Math.PI;
-    const text = model.street.name.toUpperCase().split('').join(' ');
-    ctx.save();
-    ctx.translate(a.x, a.y);
-    ctx.rotate(angle);
-    ctx.font = '600 9px ui-monospace, SFMono-Regular, Menlo, monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.lineWidth = 3.5;
-    ctx.strokeStyle = 'rgba(8, 15, 14, .9)';
-    ctx.strokeText(text, 0, -7);
-    ctx.fillStyle = 'rgba(206, 216, 200, .62)';
-    ctx.fillText(text, 0, -7);
-    ctx.restore();
+  // Every portfolio street is named on the plan, in its own colour, set
+  // along its centreline so the label follows the road the car drives.
+  if (expanded) {
+    const streets = model.districts.length
+      ? model.districts.map((d) => ({ name: d.street, p: d.p, color: districtColor(d.id) }))
+      : model.street ? [{ name: model.street.name, p: model.street.p, color: '#f2b300' }] : [];
+    for (const street of streets) {
+      const p = street.p;
+      if (p.length < 8) continue;
+      const mid = Math.floor(p.length / 4) * 2;
+      const a = toScreen(view, size, p[mid], p[mid + 1]);
+      const b = toScreen(view, size, p[mid + 2], p[mid + 3]);
+      let angle = Math.atan2(b.y - a.y, b.x - a.x);
+      if (angle > Math.PI / 2 || angle < -Math.PI / 2) angle += Math.PI;
+      ctx.save();
+      ctx.translate(a.x, a.y);
+      ctx.rotate(angle);
+      ctx.font = '800 11px Archivo, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(15, 28, 46, .95)';
+      ctx.strokeText(street.name, 0, -8);
+      ctx.fillStyle = street.color;
+      ctx.fillText(street.name, 0, -8);
+      ctx.restore();
+    }
   }
 
   // --- crossings ---------------------------------------------------------
@@ -303,7 +310,7 @@ function paint(args: {
     if (active) {
       ctx.beginPath();
       ctx.arc(s.x, s.y, r + 6, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(216, 248, 81, .5)';
+      ctx.strokeStyle = 'rgba(242, 179, 0, .5)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
@@ -320,7 +327,6 @@ function paint(args: {
     ctx.font = FONT_STRONG;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(i + 1), s.x, s.y + 0.5);
 
     // Labels: always in the expanded map, only when there is room in the
     // compact map. The active stop is never dropped. Stops sit every ~62 m on
@@ -354,7 +360,7 @@ function paint(args: {
         const bx = fits.x - w / 2;
         ctx.fillStyle = 'rgba(6, 13, 14, .82)';
         ctx.fillRect(bx, fits.y, w, h);
-        ctx.strokeStyle = active ? 'rgba(216, 248, 81, .55)' : 'rgba(190, 205, 192, .16)';
+        ctx.strokeStyle = active ? 'rgba(242, 179, 0, .55)' : 'rgba(190, 205, 192, .16)';
         ctx.lineWidth = 1;
         ctx.strokeRect(bx + 0.5, fits.y + 0.5, w - 1, h - 1);
         ctx.fillStyle = active ? PALETTE.route : PALETTE.label;
@@ -371,7 +377,7 @@ function paint(args: {
   ctx.translate(carScreen.x, carScreen.y);
   ctx.beginPath();
   ctx.arc(0, 0, expanded ? 13 : 11, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(216, 248, 81, .12)';
+  ctx.fillStyle = 'rgba(242, 179, 0, .12)';
   ctx.fill();
   ctx.rotate(car.yaw);
   ctx.beginPath();
@@ -713,7 +719,7 @@ export function MapPanel() {
       <header className="map-panel__bar">
         <p>
           <span className="map-panel__dot" />
-          {mapExpanded ? 'Soburr Island · all projects' : 'Driving map'}
+          {mapExpanded ? 'Street map · all work' : 'Driving map'}
         </p>
         <div className="map-panel__actions">
           <button onClick={() => zoomBy(1.45)} aria-label="Zoom in">＋</button>
@@ -797,7 +803,7 @@ export function MapPanel() {
           ) : (
             <>
               {model ? `${model.stations.length} stops` : destinations.length + ' stops'} ·{' '}
-          {model ? `${Math.round(model.street?.length ?? 0)} m street` : 'loading'}
+          {model ? `5 streets` : 'loading'}
             </>
           )}
         </p>

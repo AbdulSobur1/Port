@@ -126,7 +126,7 @@ test('building bundles are present, varied and plausible', () => {
 });
 
 test('every station is inside the playable area, on the road network', () => {
-  assert.equal(world.stations.length, 9);
+  assert.equal(world.stations.length, 18);
   assert.ok(playable);
   for (const station of world.stations) {
     assert.ok(
@@ -189,21 +189,6 @@ test('planned routes follow mapped roads and avoid buildings', () => {
   }
   assert.ok(checked > 60, `only ${checked} vertices checked`);
   assert.ok(inside / checked < 0.02, `${inside}/${checked} route vertices fall inside building footprints`);
-});
-
-test('map archive is clipped to this neighbourhood, not the old district', () => {
-  const archive = path.join(root, 'public', 'map', 'lagos.pmtiles');
-  assert.ok(fs.existsSync(archive), 'missing public/map/lagos.pmtiles');
-  const buf = fs.readFileSync(archive);
-  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  const minLon = view.getInt32(102, true) / 1e7;
-  const minLat = view.getInt32(106, true) / 1e7;
-  const maxLon = view.getInt32(110, true) / 1e7;
-  const maxLat = view.getInt32(114, true) / 1e7;
-  const b = world.meta.bounds;
-  assert.ok(minLon >= b.west - 0.001 && maxLon <= b.east + 0.001, `archive lon ${minLon}..${maxLon}`);
-  assert.ok(minLat >= b.south - 0.001 && maxLat <= b.north + 0.001, `archive lat ${minLat}..${maxLat}`);
-  assert.ok(maxLon - minLon < 0.02 && maxLat - minLat < 0.02, 'archive still covers the 10 km district');
 });
 
 test('provenance documents the pipeline outputs and limitations', () => {

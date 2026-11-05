@@ -1,10 +1,11 @@
 'use client';
 
+import { districts, works } from '@/lib/works';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
-import { projects } from '@/lib/projects';
+import { Journey } from '@/components/journey/journey';
 import { createCollisionGrid } from '@/lib/world/collision';
 import { createCar } from '@/lib/world/vehicle';
 import {
@@ -63,7 +64,6 @@ export function WorldScene() {
     (async () => {
       try {
         const bundle = await loadWorld(controller.signal);
-        console.log('[world] bundle loaded', bundle.world.meta.chunks);
         if (cancelled) return;
         const { world, graph, provenance } = bundle;
         const meta = world.meta;
@@ -73,9 +73,7 @@ export function WorldScene() {
         for (let row = 0; row < meta.chunks; row++) {
           for (let col = 0; col < meta.chunks; col++) coords.push({ row, col });
         }
-        console.log('[world] requesting chunks', coords.length);
         const results = await Promise.allSettled(coords.map((c) => loadBuildingChunk(c.row, c.col)));
-        console.log('[world] chunks settled', results.length);
         if (cancelled) return;
 
         const chunks = results
@@ -105,6 +103,10 @@ export function WorldScene() {
         const projects = placeProjectBuildings(world.stations, allFootprints, {
           roadHalfWidth,
           playable: meta.playable?.world ?? meta.worldBounds,
+          roads: world.roads
+            .filter((r) => !r.tunnel)
+            .map((r) => ({ pts: r.pts, halfWidth: Math.max(2, (r.width ?? 6) / 2) })),
+          colors: Object.fromEntries(districts.map((d) => [d.id, d.color])),
         });
         const cleared = clearProjectPlots(allFootprints, projects);
         const kept = new Set(cleared.footprints);
@@ -122,9 +124,6 @@ export function WorldScene() {
           ...projectCollisionFootprints(projects),
           ...buildPropColliders(furniture, lights, world.signals ?? []),
         ]);
-        console.log(
-          `[world] project buildings ${projects.length}, cleared ${cleared.removed} surveyed footprints, colliders ${grid.count}`
-        );
         if (process.env.NODE_ENV !== 'production') {
           (window as unknown as { __lagosProjects?: unknown }).__lagosProjects = projects;
         }
@@ -140,7 +139,7 @@ export function WorldScene() {
           route: null,
           routeId: 0,
         };
-        if (process.env.NODE_ENV !== 'production') {
+        if (process.env.NODE_ENV !== 'production' || window.location.search.includes('debug')) {
           (window as unknown as { __lagosRuntime?: unknown }).__lagosRuntime = runtime;
         }
         setTelemetry({ x: spawn.x, z: spawn.z, yaw: spawn.yaw, road: spawn.road, speed: 0, gear: 'N' });
@@ -175,59 +174,33 @@ export function WorldScene() {
     };
   }, [attempt]);
 
-  const fallback = useMemo(() => <PortfolioList />, []);
-
-  if (webgl === false) {
-    return (
-      <Masthead>
-        <div className="fallback">
-          <p className="eyebrow">Soburr / portfolio index</p>
-          <h1>This world needs WebGL.</h1>
-          <p>The drivable city cannot run in this browser, but every project record is still here.</p>
-          <PortfolioList visible />
-        </div>
-      </Masthead>
-    );
-  }
-
+  // No WebGL, or the map data failed: the scroll journey tells the same story.
+  if (webgl === false) return <Journey />;
   if (error) {
     return (
-      <Masthead>
-        <div className="fallback">
-          <p className="eyebrow">Signal lost</p>
-          <h1>The Lagos dataset did not load.</h1>
-          <p className="fallback__error">{error}</p>
-          <p>
-            The world is a static build of OpenStreetMap geometry served from this domain — a network or
-            storage failure blocks the drive but not the work.
-          </p>
-          <div className="fallback__actions">
-            <button className="world-button world-button--primary" onClick={() => setAttempt((n) => n + 1)}>
-              Try again
-            </button>
-            <Link className="world-button" href="/work/proofmesh">Open a case record</Link>
-          </div>
-          <PortfolioList visible />
-        </div>
-      </Masthead>
+      <>
+        <p className="fallback__banner" role="alert">
+          The map could not load. You are seeing the scroll version instead.
+          <button onClick={() => setAttempt((n) => n + 1)}>Try the map again</button>
+        </p>
+        <Journey />
+      </>
     );
   }
 
   if (!data) {
     return (
-      <Masthead>
+      <main className="masthead">
         <div className="boot" role="status" aria-live="polite">
-          <div className="boot__mark">SOBURR</div>
-          <h1>Lagos Island, at street scale.</h1>
+          <div className="boot__mark">ABDULSOBUR</div>
+          <h1>Loading the street map…</h1>
           <p className="boot__status">{status}</p>
           <div className="boot__bar"><span /></div>
           <p className="boot__note">
-            Real streets and building footprints from OpenStreetMap (ODbL), curated to a 560 m playable
-            neighbourhood around Glover and Oshodi streets. The national extract is processed locally and never shipped.
+            Streets and building shapes come from OpenStreetMap. Prefer a plain list? <Link href="/work">Open it here</Link>.
           </p>
         </div>
-        {fallback}
-      </Masthead>
+      </main>
     );
   }
 
@@ -267,44 +240,20 @@ export function WorldScene() {
   );
 }
 
-function Masthead({ children }: { children: React.ReactNode }) {
+/** Always-present list of the work for search engines and screen readers. */
+function PortfolioList() {
   return (
-    <main className="masthead">
-      <header className="masthead__bar">
-        <span className="hud-brand__mark">SOBURR</span>
-        <span className="hud-brand__sub">Lagos Island / Glover</span>
-      </header>
-      {children}
-      <footer className="masthead__foot">
-        Data © OpenStreetMap contributors (ODbL) · Tiles generated locally from the 2026-10-15 Geofabrik Nigeria extract
-      </footer>
-    </main>
-  );
-}
-
-/** Always-present, keyboard-reachable list of the portfolio (SEO + no-WebGL + a11y). */
-function PortfolioList({ visible = false }: { visible?: boolean }) {
-  return (
-    <section
-      id="portfolio-fallback"
-      className={visible ? 'portfolio-list portfolio-list--visible' : 'portfolio-list sr-only'}
-      aria-label="Portfolio index"
-    >
+    <section id="portfolio-fallback" className="portfolio-list sr-only" aria-label="All work">
       <h2>Work</h2>
       <ul>
-        {projects.map((project) => (
-          <li key={project.slug}>
-            <Link href={`/work/${project.slug}`}>
-              <span>{project.number}</span>
-              <strong>{project.title}</strong>
-              <small>{project.category}</small>
+        {works.map((w) => (
+          <li key={w.slug}>
+            <Link href={`/work/${w.slug}`}>
+              <strong>{w.title}</strong> <small>{w.kind}. {w.line}</small>
             </Link>
           </li>
         ))}
       </ul>
-      <p>
-        <a href="https://github.com/AbdulSobur1" target="_blank" rel="noreferrer">GitHub profile</a>
-      </p>
     </section>
   );
 }

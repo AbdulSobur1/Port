@@ -139,7 +139,7 @@ export const VEHICLES: VehicleDefinition[] = [
     body: 'hatch',
     drivetrain: 'FWD',
     seats: 5,
-    paint: { base: '#d8f851', accent: '#20262a', caliper: '#a9b831' },
+    paint: { base: '#f2b300', accent: '#20262a', caliper: '#a9b831' },
     dimensions: { length: 4.12, width: 1.78, height: 1.46, wheelbase: 2.58, wheelRadius: 0.32 },
     specs: { powerKw: 118, torqueNm: 250, massKg: 1290, zeroTo100: 8.6, topSpeedKmh: 210, inWorldTopSpeedKmh: 94.6 },
     specSource: SPEC_SOURCE,

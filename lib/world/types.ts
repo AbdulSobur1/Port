@@ -51,6 +51,8 @@ export type RoadData = {
 };
 
 export type StationData = {
+  /** District id from lib/works.ts; absent in old snapshots. */
+  district?: string;
   zone: string;
   label: string;
   x: number;
@@ -90,6 +92,8 @@ export type MainStreetData = {
 export type WorldData = {
   meta: WorldMeta;
   mainStreet?: MainStreetData;
+  /** One entry per portfolio street (lib/works.ts), with its centreline. */
+  districts?: { id: string; street: string; length: number; p: number[]; stations: string[] }[];
   roads: RoadData[];
   /** Water polygons, flat [x,z,…] rings. */
   water: number[][];

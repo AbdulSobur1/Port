@@ -1,17 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap');
 
 :root {
-  --ink: #070d0e;
-  --ink-soft: #0d1416;
+  --ink: #0f1c2e;
+  --ink-soft: #142640;
   --mist: #eef2ec;
   --muted: #9faeA6;
-  --lime: #d8f851;
+  --lime: #f2b300;
   --line: rgba(238, 242, 236, .16);
   --line-strong: rgba(238, 242, 236, .3);
   --panel: rgba(8, 14, 15, .82);
-  --sans: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --serif: "Playfair Display", Georgia, serif;
+  --sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Archivo", system-ui, sans-serif;
+  --serif: "Archivo", system-ui, sans-serif;
   --r: 14px;
 }
 
@@ -143,7 +143,7 @@ kbd {
   background: rgba(238, 242, 236, .12);
   font-size: .62rem;
 }
-.hud-pill--warn { border-color: rgba(216, 248, 81, .55); color: var(--lime); }
+.hud-pill--warn { border-color: rgba(242, 179, 0, .55); color: var(--lime); }
 .hud-top__right { display: flex; align-items: center; gap: .5rem; justify-self: end; }
 .hud-speed {
   display: inline-flex;
@@ -222,7 +222,7 @@ kbd {
   border-radius: 10px;
   padding-right: .4rem;
 }
-.rail__list li[data-active="true"] { background: rgba(216, 248, 81, .09); }
+.rail__list li[data-active="true"] { background: rgba(242, 179, 0, .09); }
 .rail__item {
   display: flex;
   align-items: center;
@@ -285,7 +285,7 @@ kbd {
   top: 5.2rem;
   transform: translateX(-50%);
   padding: .65rem .95rem;
-  border: 1px solid rgba(216, 248, 81, .45);
+  border: 1px solid rgba(242, 179, 0, .45);
   border-radius: 999px;
   background: rgba(8, 14, 15, .92);
   color: var(--mist);
@@ -465,10 +465,10 @@ kbd {
   -webkit-user-select: none;
   transition: background .12s, transform .12s;
 }
-.touch button.is-active { background: rgba(216, 248, 81, .9); color: #0a1108; transform: scale(.96); }
+.touch button.is-active { background: rgba(242, 179, 0, .9); color: #0a1108; transform: scale(.96); }
 .touch__pedals button { height: 4.6rem; border-radius: 1.6rem; font: 500 .62rem var(--mono); letter-spacing: .1em; }
-.touch__gas { width: 5.1rem !important; background: rgba(216, 248, 81, .16) !important; border-color: rgba(216, 248, 81, .5) !important; }
-.touch__gas.is-active { background: rgba(216, 248, 81, .92) !important; }
+.touch__gas { width: 5.1rem !important; background: rgba(242, 179, 0, .16) !important; border-color: rgba(242, 179, 0, .5) !important; }
+.touch__gas.is-active { background: rgba(242, 179, 0, .92) !important; }
 .touch__brake { background: rgba(255, 120, 99, .14) !important; border-color: rgba(255, 120, 99, .45) !important; }
 
 /* ------------------------------------------------------------------ */
@@ -559,7 +559,7 @@ kbd {
   justify-content: space-between;
   gap: .5rem;
   padding: .5rem .55rem;
-  border: 1px solid rgba(216, 248, 81, .38);
+  border: 1px solid rgba(242, 179, 0, .38);
   border-radius: 9px;
   background: rgba(6, 13, 14, .92);
   backdrop-filter: blur(8px);
@@ -582,7 +582,7 @@ kbd {
   font: 500 .58rem var(--mono);
 }
 .map-panel__pick-actions button:hover { background: rgba(238, 242, 236, .12); }
-.map-panel__pick-actions .map-panel__drive { border-color: rgba(216, 248, 81, .5); color: var(--lime); }
+.map-panel__pick-actions .map-panel__drive { border-color: rgba(242, 179, 0, .5); color: var(--lime); }
 .map-panel__pick-actions button:disabled { opacity: .4; }
 .map-panel__status {
   position: absolute;
@@ -645,7 +645,7 @@ kbd {
   flex-direction: column;
   background:
     radial-gradient(ellipse at 62% 30%, #16302d 0, transparent 55%),
-    linear-gradient(#070d0e, #0a1214);
+    linear-gradient(#0f1c2e, #0a1214);
 }
 .masthead__bar {
   display: flex;
@@ -842,7 +842,7 @@ kbd {
   padding: clamp(1rem, 3vw, 2.4rem);
   background:
     radial-gradient(1100px 600px at 18% 0%, rgba(56, 82, 74, .32), transparent 62%),
-    linear-gradient(160deg, #070d0e 0%, #0a1214 55%, #070c0d 100%);
+    linear-gradient(160deg, #0f1c2e 0%, #0a1214 55%, #070c0d 100%);
   color: var(--mist);
 }
 .car-select__head {
@@ -906,7 +906,7 @@ kbd {
   transition: border-color .16s, background .16s;
 }
 .car-list__item:hover { border-color: var(--line-strong); background: rgba(255, 255, 255, .035); }
-.car-list__item.is-active { border-color: var(--car-accent, var(--lime)); background: rgba(216, 248, 81, .05); }
+.car-list__item.is-active { border-color: var(--car-accent, var(--lime)); background: rgba(242, 179, 0, .05); }
 .car-list__swatch { width: .55rem; height: 2.4rem; border-radius: 999px; background: var(--car-accent); }
 .car-list__text { display: flex; flex-direction: column; gap: .1rem; }
 .car-list__text strong { font: 600 .82rem var(--sans); }

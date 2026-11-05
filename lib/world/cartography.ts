@@ -227,6 +227,7 @@ export type MapModel = {
   water: number[][];
   sea: number[][];
   street: WorldData['mainStreet'] | null;
+  districts: NonNullable<WorldData['districts']>;
   /** Everything the map may draw, in world metres. */
   extent: WorldRect;
   /** The framing rect for the whole portfolio street (expanded map). */
@@ -254,9 +255,9 @@ function widen(road: RoadData): MapRoad {
 export function buildMapModel(world: WorldData, buildings: Building[] = []): MapModel {
   const streetName = world.mainStreet?.name ?? null;
   const roads = world.roads.filter((r) => r.pts.length >= 4).map(widen);
-  if (streetName) {
-    for (const road of roads) if (road.name === streetName) road.main = true;
-  }
+  const districts = world.districts ?? [];
+  const streetNames = new Set([streetName, ...districts.map((d) => d.street)].filter(Boolean));
+  for (const road of roads) if (road.name && streetNames.has(road.name)) road.main = true;
 
   const extent = world.meta.playable?.world
     ? {
@@ -267,7 +268,9 @@ export function buildMapModel(world: WorldData, buildings: Building[] = []): Map
       }
     : { ...world.meta.worldBounds };
 
-  const streetParts = world.mainStreet
+  const streetParts = districts.length
+    ? districts.map((d) => rectOfPolyline(d.p))
+    : world.mainStreet
     ? [rectOfPolyline(world.mainStreet.p)]
     : world.stations.map((s) => ({ minX: s.x, maxX: s.x, minZ: s.z, maxZ: s.z }));
   const streetExtent = expandRect(rectOfPoints(streetParts), 62);
@@ -282,6 +285,7 @@ export function buildMapModel(world: WorldData, buildings: Building[] = []): Map
     water: world.water ?? [],
     sea: world.sea ?? [],
     street: world.mainStreet ?? null,
+    districts,
     extent,
     streetExtent,
   };
